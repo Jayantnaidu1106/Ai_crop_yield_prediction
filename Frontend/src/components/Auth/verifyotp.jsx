@@ -1,8 +1,8 @@
 // src/components/Auth/VerifyOTP.jsx
 
 import React, { useState } from 'react';
-import { useTwilioAuth } from '../../hooks/useTwilioAuth';
-import { useAuth } from '../../context/AuthContext';
+import { useTwilioAuth } from '../../hooks/usetwilioauth';
+import { useAuth } from '../../context/authcontext';
 import { useNavigate } from 'react-router-dom';
 
 function VerifyOTP({ onBack }) {

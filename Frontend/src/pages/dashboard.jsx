@@ -1,8 +1,9 @@
 // src/pages/Dashboard.jsx
 
 import React, { useEffect } from 'react';
-import { useAuth } from '../context/AuthContext';
-import { useDataFetcher, useRecommendations } from '../hooks/useTwilioAuth'; // Use the placeholder hooks
+import { useAuth } from '../context/authcontext';
+import { useDataFetcher } from '../hooks/usedatafetcher';
+import { useRecommendations } from '../hooks/userecommendations';
 
 function Dashboard() {
     const { logout } = useAuth();

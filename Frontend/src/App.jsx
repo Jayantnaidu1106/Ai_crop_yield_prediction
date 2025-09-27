@@ -2,9 +2,9 @@
 
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './context/AuthContext';
-import AuthPage from './pages/AuthPage';
-import Dashboard from './pages/Dashboard';
+import { AuthProvider, useAuth } from './context/authcontext';
+import AuthPage from './pages/authpage';
+import Dashboard from './pages/dashboard';
 
 // Custom component to protect routes that require authentication
 const ProtectedRoute = ({ children }) => {

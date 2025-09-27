@@ -1,8 +1,8 @@
 // src/pages/AuthPage.jsx
 
 import React, { useState } from 'react';
-import Login from '../components/Auth/Login';
-import VerifyOTP from '../components/Auth/VerifyOTP';
+import Login from '../components/Auth/LoginOTP';
+import VerifyOTP from '../components/Auth/verifyotp';
 // Placeholder for the main multi-step signup component
 const SignUp = () => <div>Signup Flow Placeholder</div>; 
 
