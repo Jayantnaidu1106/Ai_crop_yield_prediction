@@ -6,10 +6,10 @@ import { useAuth } from '../context/authcontext';
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 /**
- * Custom hook to fetch aggregated dashboard data or history data.
- * @param {string} endpointPath - The path for the specific data (/dashboard or /history).
+ * Custom hook to fetch aggregated dashboard data or metrics data.
+ * @param {string} endpointPath - The path for the specific data (/dashboard or /metrics).
  */
-export const useDataFetcher = (endpointPath = '/dashboard') => {
+export const useDataFetcher = (endpointPath = '') => {
     const { authToken } = useAuth();
     const [data, setData] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -25,7 +25,7 @@ export const useDataFetcher = (endpointPath = '/dashboard') => {
         setError(null);
 
         try {
-            const response = await fetch(`${API_BASE_URL}/api/data${endpointPath}`, {
+            const response = await fetch(`${API_BASE_URL}/api/dashboard${endpointPath}`, {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
@@ -39,7 +39,7 @@ export const useDataFetcher = (endpointPath = '/dashboard') => {
             }
 
             const result = await response.json();
-            setData(result);
+            setData(result.data || result);
         } catch (err) {
             console.error(`Error fetching data:`, err);
             setError(err.message);
@@ -48,5 +48,8 @@ export const useDataFetcher = (endpointPath = '/dashboard') => {
         }
     }, [authToken, endpointPath]);
 
-    return { data, isLoading, error, fetchData };
+    // Alias for backward compatibility
+    const fetchMetrics = fetchData;
+
+    return { data, isLoading, error, fetchData, fetchMetrics };
 };
