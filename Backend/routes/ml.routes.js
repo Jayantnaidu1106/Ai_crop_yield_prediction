@@ -1,120 +1,150 @@
 // routes/ml.routes.js
-// ML prediction routes
+// Machine Learning integration routes
 
 const express = require('express');
 const router = express.Router();
-const {
-    createPrediction,
-    getQuickPrediction,
-    getBatchPredictions,
-    getPredictionAccuracy,
-    getMLServiceHealth,
-    getPredictionInsights,
-    getCropPredictionTrends,
-    compareWithRegionalAverages
-} = require('../controllers/ml.controller');
-const {
-    authenticateToken,
-    requireOTPVerification,
-    requireCompleteProfile
-} = require('../middleware/auth');
-const { validateMLPrediction, validateBatchPredictions } = require('../middleware/validation');
+const axios = require('axios');
 
-/**
- * @route   POST /api/ml/predict
- * @desc    Create new ML yield prediction
- * @access  Private (requires authentication, OTP verification, and complete profile)
- */
-router.post('/predict', 
-    authenticateToken, 
-    requireOTPVerification, 
-    requireCompleteProfile,
-    validateMLPrediction,
-    createPrediction
-);
+// POST /api/ml/predict - Get yield prediction from ML model
+router.post('/predict', async (req, res) => {
+    try {
+        const {
+            state,
+            district,
+            crop,
+            season,
+            area,
+            annual_rainfall,
+            fertilizer,
+            pesticide
+        } = req.body;
 
-/**
- * @route   GET /api/ml/quick-predict
- * @desc    Get quick prediction for dashboard (simplified inputs)
- * @access  Private (requires authentication and OTP verification)
- * @query   crop (required), area (required)
- */
-router.get('/quick-predict', 
-    authenticateToken, 
-    requireOTPVerification,
-    getQuickPrediction
-);
+        // Validate required fields
+        const requiredFields = ['state', 'district', 'crop', 'season', 'area'];
+        const missingFields = requiredFields.filter(field => !req.body[field]);
+        
+        if (missingFields.length > 0) {
+            return res.status(400).json({
+                success: false,
+                message: `Missing required fields: ${missingFields.join(', ')}`
+            });
+        }
 
-/**
- * @route   POST /api/ml/batch-predict
- * @desc    Get batch predictions for scenario analysis
- * @access  Private (requires authentication, OTP verification, and complete profile)
- */
-router.post('/batch-predict', 
-    authenticateToken, 
-    requireOTPVerification, 
-    requireCompleteProfile,
-    validateBatchPredictions,
-    getBatchPredictions
-);
+        // Call the FastAPI ML model service
+        const mlResponse = await axios.post('http://localhost:8000/predict', {
+            State: state,
+            District: district,
+            Crop: crop,
+            Season: season,
+            Area: parseFloat(area),
+            Annual_Rainfall: parseFloat(annual_rainfall || 1000),
+            Fertilizer: parseFloat(fertilizer || 100),
+            Pesticide: parseFloat(pesticide || 50)
+        });
 
-/**
- * @route   GET /api/ml/accuracy
- * @desc    Get prediction accuracy metrics for user
- * @access  Private (requires authentication and OTP verification)
- * @query   timeframe (optional, days)
- */
-router.get('/accuracy', 
-    authenticateToken, 
-    requireOTPVerification,
-    getPredictionAccuracy
-);
+        res.json({
+            success: true,
+            data: {
+                predicted_yield: mlResponse.data.predicted_yield,
+                model_version: mlResponse.data.model_version || 'v1.0.0',
+                confidence: mlResponse.data.confidence || 85.0,
+                input_parameters: req.body
+            }
+        });
 
-/**
- * @route   GET /api/ml/health
- * @desc    Get ML service health status
- * @access  Private (requires authentication)
- */
-router.get('/health', 
-    authenticateToken,
-    getMLServiceHealth
-);
+    } catch (error) {
+        if (error.response) {
+            // ML service error
+            res.status(502).json({
+                success: false,
+                message: 'ML service error',
+                error: error.response.data
+            });
+        } else if (error.request) {
+            // Network error
+            res.status(503).json({
+                success: false,
+                message: 'ML service unavailable',
+                error: 'Cannot connect to prediction service'
+            });
+        } else {
+            // Other error
+            res.status(500).json({
+                success: false,
+                message: 'Server error',
+                error: error.message
+            });
+        }
+    }
+});
 
-/**
- * @route   GET /api/ml/insights
- * @desc    Get prediction insights for dashboard
- * @access  Private (requires authentication and OTP verification)
- * @query   limit (optional)
- */
-router.get('/insights', 
-    authenticateToken, 
-    requireOTPVerification,
-    getPredictionInsights
-);
+// GET /api/ml/health - Check ML service health
+router.get('/health', async (req, res) => {
+    try {
+        const response = await axios.get('http://localhost:8000/health', {
+            timeout: 5000
+        });
+        
+        res.json({
+            success: true,
+            message: 'ML service is healthy',
+            data: response.data
+        });
+        
+    } catch (error) {
+        res.status(503).json({
+            success: false,
+            message: 'ML service unavailable',
+            error: error.message
+        });
+    }
+});
 
-/**
- * @route   GET /api/ml/trends
- * @desc    Get crop-specific prediction trends
- * @access  Private (requires authentication and OTP verification)
- * @query   crop (optional), months (optional)
- */
-router.get('/trends', 
-    authenticateToken, 
-    requireOTPVerification,
-    getCropPredictionTrends
-);
+// GET /api/ml/crops - Get supported crops from ML service
+router.get('/crops', async (req, res) => {
+    try {
+        // Return hardcoded list of supported crops
+        const supportedCrops = [
+            'rice', 'wheat', 'maize', 'sugarcane', 'cotton', 'soybean',
+            'groundnut', 'sunflower', 'mustard', 'barley', 'millets', 'pulses'
+        ];
+        
+        res.json({
+            success: true,
+            data: supportedCrops
+        });
+        
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Server error',
+            error: error.message
+        });
+    }
+});
 
-/**
- * @route   GET /api/ml/regional-comparison
- * @desc    Compare predictions with regional averages
- * @access  Private (requires authentication, OTP verification, and complete profile)
- * @query   crop (required), season (optional), year (optional)
- */
-router.get('/regional-comparison', 
-    authenticateToken, 
-    requireOTPVerification, 
-    requireCompleteProfile,
-    compareWithRegionalAverages
-);
+// GET /api/ml/states - Get supported states
+router.get('/states', async (req, res) => {
+    try {
+        const supportedStates = [
+            'Andhra Pradesh', 'Assam', 'Bihar', 'Gujarat', 'Haryana',
+            'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra',
+            'Odisha', 'Punjab', 'Rajasthan', 'Tamil Nadu', 'Telangana',
+            'Uttar Pradesh', 'West Bengal'
+        ];
+        
+        res.json({
+            success: true,
+            data: supportedStates
+        });
+        
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Server error',
+            error: error.message
+        });
+    }
+});
 
 module.exports = router;

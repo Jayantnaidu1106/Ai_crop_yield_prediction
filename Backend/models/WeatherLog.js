@@ -1,137 +1,136 @@
-// models/WeatherLog.js
+// Backend/models/WeatherLog.js
+// Weather logging model for tracking farm-specific weather data
 
 const mongoose = require('mongoose');
+const Schema = mongoose.Schema;
 
-const weatherLogSchema = new mongoose.Schema({
+const weatherLogSchema = new Schema({
+    // Reference to the farmer who logged this weather data
     farmerId: {
-        type: mongoose.Schema.Types.ObjectId,
+        type: Schema.Types.ObjectId,
         ref: 'User',
-        required: true
+        required: true,
+        index: true
     },
+    
+    // Date of the weather observation
     date: {
         type: Date,
         required: true,
-        default: Date.now
-    },
-    rainfall: {
-        type: Number,
-        required: true,
-        min: 0,
-        max: 1000, // Maximum realistic daily rainfall in mm
         validate: {
             validator: function(v) {
-                return v >= 0;
+                return v <= new Date(); // Cannot log future weather
             },
-            message: 'Rainfall cannot be negative'
+            message: 'Weather date cannot be in the future'
         }
     },
-    temperature: {
-        min: {
-            type: Number,
-            required: true,
-            min: -50,
-            max: 60
-        },
-        max: {
-            type: Number,
-            required: true,
-            min: -50,
-            max: 60
-        },
-        avg: {
-            type: Number,
-            min: -50,
-            max: 60
+    
+    // Rainfall measurement in millimeters
+    rainfall_mm: {
+        type: Number,
+        required: true,
+        min: [0, 'Rainfall cannot be negative'],
+        max: [1000, 'Rainfall measurement seems unusually high'],
+        validate: {
+            validator: function(v) {
+                return Number.isFinite(v);
+            },
+            message: 'Rainfall must be a valid number'
         }
     },
+    
+    // Temperature in Celsius
+    temperature_c: {
+        type: Number,
+        required: true,
+        min: [-10, 'Temperature too low for agricultural regions'],
+        max: [60, 'Temperature too high for typical weather'],
+        validate: {
+            validator: function(v) {
+                return Number.isFinite(v);
+            },
+            message: 'Temperature must be a valid number'
+        }
+    },
+    
+    // Relative humidity percentage
     humidity: {
         type: Number,
-        min: 0,
-        max: 100
-    },
-    windSpeed: {
-        type: Number,
-        min: 0,
-        max: 200 // km/h
-    },
-    soilMoisture: {
-        type: Number,
-        min: 0,
-        max: 100 // percentage
-    },
-    weatherCondition: {
-        type: String,
-        enum: ['sunny', 'cloudy', 'rainy', 'stormy', 'foggy', 'windy'],
-        default: 'sunny'
-    },
-    location: {
-        latitude: {
-            type: Number,
-            min: -90,
-            max: 90
-        },
-        longitude: {
-            type: Number,
-            min: -180,
-            max: 180
+        required: true,
+        min: [0, 'Humidity cannot be negative'],
+        max: [100, 'Humidity cannot exceed 100%'],
+        validate: {
+            validator: function(v) {
+                return Number.isFinite(v);
+            },
+            message: 'Humidity must be a valid number'
         }
-    },
-    source: {
-        type: String,
-        enum: ['manual', 'api', 'sensor'],
-        default: 'manual'
-    },
-    notes: {
-        type: String,
-        maxlength: 300
     }
 }, {
-    timestamps: true,
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true }
+    timestamps: true, // Adds createdAt and updatedAt fields
+    collection: 'weatherlogs'
 });
 
-// Compound index for efficient queries
+// Compound index for efficient farmer-specific weather queries
 weatherLogSchema.index({ farmerId: 1, date: -1 });
+
+// Index for date-based queries across all farmers
 weatherLogSchema.index({ date: -1 });
-weatherLogSchema.index({ 'location.latitude': 1, 'location.longitude': 1 });
 
-// Virtual for temperature average calculation
-weatherLogSchema.virtual('temperature.calculated_avg').get(function() {
-    if (this.temperature.avg) {
-        return this.temperature.avg;
-    }
-    return (this.temperature.min + this.temperature.max) / 2;
+// Prevent duplicate weather logs for same farmer on same date
+weatherLogSchema.index({ farmerId: 1, date: 1 }, { unique: true });
+
+// Virtual for temperature in Fahrenheit
+weatherLogSchema.virtual('temperature_f').get(function() {
+    return (this.temperature_c * 9/5) + 32;
 });
 
-// Pre-save middleware to calculate average temperature
-weatherLogSchema.pre('save', function(next) {
-    if (this.temperature.min && this.temperature.max && !this.temperature.avg) {
-        this.temperature.avg = (this.temperature.min + this.temperature.max) / 2;
-    }
-    
-    // Validate temperature range
-    if (this.temperature.min > this.temperature.max) {
-        const error = new Error('Minimum temperature cannot be greater than maximum temperature');
-        return next(error);
-    }
-    
-    next();
+// Virtual for weather condition assessment
+weatherLogSchema.virtual('weatherCondition').get(function() {
+    if (this.rainfall_mm > 25) return 'Heavy Rain';
+    if (this.rainfall_mm > 10) return 'Moderate Rain';
+    if (this.rainfall_mm > 2.5) return 'Light Rain';
+    if (this.humidity > 85) return 'Very Humid';
+    if (this.temperature_c > 35) return 'Very Hot';
+    if (this.temperature_c < 15) return 'Cold';
+    return 'Normal';
 });
 
-// Static method to get weather data for date range
-weatherLogSchema.statics.getWeatherRange = function(farmerId, startDate, endDate) {
-    return this.find({
-        farmerId: farmerId,
-        date: {
-            $gte: startDate,
-            $lte: endDate
-        }
-    }).sort({ date: -1 });
+// Instance method to check if it's a rainy day
+weatherLogSchema.methods.isRainyDay = function() {
+    return this.rainfall_mm > 2.5;
 };
 
-// Static method to get last N days of weather
-weatherLogSchema.statics.getLastNDays = function(farmerId, days = 30) {
+// Static method to get weather summary for a farmer over a period
+weatherLogSchema.statics.getWeatherSummary = function(farmerId, startDate, endDate) {
+    return this.aggregate([
+        {
+            $match: {
+                farmerId: farmerId,
+                date: { $gte: startDate, $lte: endDate }
+            }
+        },
+        {
+            $group: {
+                _id: null,
+                totalRainfall: { $sum: '$rainfall_mm' },
+                avgTemperature: { $avg: '$temperature_c' },
+                avgHumidity: { $avg: '$humidity' },
+                maxTemp: { $max: '$temperature_c' },
+                minTemp: { $min: '$temperature_c' },
+                rainyDays: {
+                    $sum: {
+                        $cond: [{ $gt: ['$rainfall_mm', 2.5] }, 1, 0]
+                    }
+                },
+                totalRecords: { $sum: 1 }
+            }
+        }
+    ]);
+};
+
+// Static method to find recent weather data
+weatherLogSchema.statics.getRecentWeather = function(farmerId, days = 7) {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
     
@@ -141,34 +140,18 @@ weatherLogSchema.statics.getLastNDays = function(farmerId, days = 30) {
     }).sort({ date: -1 });
 };
 
-// Static method to get weather summary
-weatherLogSchema.statics.getWeatherSummary = function(farmerId, days = 30) {
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - days);
-    
-    return this.aggregate([
-        {
-            $match: {
-                farmerId: mongoose.Types.ObjectId(farmerId),
-                date: { $gte: startDate }
-            }
-        },
-        {
-            $group: {
-                _id: null,
-                totalRainfall: { $sum: '$rainfall' },
-                avgTemperatureMin: { $avg: '$temperature.min' },
-                avgTemperatureMax: { $avg: '$temperature.max' },
-                avgHumidity: { $avg: '$humidity' },
-                recordCount: { $sum: 1 },
-                rainyDays: {
-                    $sum: {
-                        $cond: [{ $gt: ['$rainfall', 0] }, 1, 0]
-                    }
-                }
-            }
-        }
-    ]);
-};
-
 module.exports = mongoose.model('WeatherLog', weatherLogSchema);
+
+/*
+Sample JSON document:
+{
+    "_id": "507f1f77bcf86cd799439014",
+    "farmerId": "507f1f77bcf86cd799439011",
+    "date": "2023-07-20T00:00:00.000Z",
+    "rainfall_mm": 15.5,
+    "temperature_c": 28.5,
+    "humidity": 75.2,
+    "createdAt": "2023-07-20T18:30:00.000Z",
+    "updatedAt": "2023-07-20T18:30:00.000Z"
+}
+*/

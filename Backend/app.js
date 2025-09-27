@@ -1,77 +1,35 @@
-// src/app.js
+// Backend/app.js
+// Express application setup
 
-const express = require('express');
-const cors = require('cors');
 require('dotenv').config();
-
-// Import database connection
-const connectDB = require('./config/database');
-
-// Import routes
-const authRoutes = require('./routes/auth.routes');
-const userRoutes = require('./routes/user.routes');
-const weatherRoutes = require('./routes/weather.routes');
-const recommendationRoutes = require('./routes/recommendation.routes');
-const predictionRoutes = require('./routes/prediction.routes');
-const mlRoutes = require('./routes/ml.routes');
-const dashboardRoutes = require('./routes/dashboard.routes');
+const express = require('express');
+const helmet = require('helmet');
+const cors = require('cors');
+const cookieParser = require('cookie-parser');
+const { connectDB } = require('./config/mongoose');
 
 const app = express();
 
-// Connect to MongoDB
-connectDB();
+// Security middleware
+app.use(helmet());
 
-// Middleware
+// CORS configuration
 app.use(cors({
-    origin: ['http://localhost:5173', 'http://localhost:3000'],
+    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
     credentials: true
 }));
-app.use(express.json({ limit: '10mb' })); // Increased limit for bulk operations
-app.use(express.urlencoded({ extended: true }));
 
-// Request logging middleware (development only)
-if (process.env.NODE_ENV === 'development') {
-    app.use((req, res, next) => {
-        console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
-        next();
-    });
-}
+// Body parsing middleware
+app.use(express.json());
+app.use(cookieParser());
 
-// Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/weather', weatherRoutes);
-app.use('/api/recommendations', recommendationRoutes);
-app.use('/api/predictions', predictionRoutes);
-app.use('/api/ml', mlRoutes);
-app.use('/api/dashboard', dashboardRoutes);
-
-// Health check route
-app.get('/api/status', (req, res) => {
-    res.json({
-        message: 'Agrivision AI Backend is running!',
-        timestamp: new Date().toISOString(),
-        environment: process.env.NODE_ENV || 'development',
-        version: '1.0.0'
-    });
+// Health check endpoint
+app.get('/health', (req, res) => {
+    res.json({ ok: true });
 });
 
-// API documentation route
-app.get('/api', (req, res) => {
-    res.json({
-        message: 'Agrivision AI API',
-        version: '1.0.0',
-        endpoints: {
-            auth: '/api/auth',
-            users: '/api/users',
-            weather: '/api/weather',
-            recommendations: '/api/recommendations',
-            predictions: '/api/predictions',
-            status: '/api/status'
-        },
-        documentation: 'See README.md for detailed API documentation'
-    });
-});
+// Placeholder routes
+app.use('/api/auth', require('./routes/auth.routes'));
 
 // 404 handler
 app.use((req, res) => {
@@ -85,7 +43,6 @@ app.use((req, res) => {
 // Global error handler
 app.use((error, req, res, next) => {
     console.error('Global error handler:', error);
-
     res.status(error.status || 500).json({
         success: false,
         message: error.message || 'Internal server error',

@@ -1,166 +1,215 @@
-// models/User.js
+// Backend/models/User.js
+// User model for smart agriculture platform with location tracking and crop context
 
 const mongoose = require('mongoose');
+const Schema = mongoose.Schema;
 
-const cropYieldRecordSchema = new mongoose.Schema({
-    crop: {
-        type: String,
-        required: true,
-        enum: ['rice', 'wheat', 'corn', 'cotton', 'sugarcane', 'soybean', 'tomato', 'potato', 'onion', 'other']
-    },
-    season: {
-        type: String,
-        required: true,
-        enum: ['kharif', 'rabi', 'summer', 'winter']
-    },
-    farmSize: {
-        type: Number,
-        required: true,
-        min: 0.1
-    },
-    actualYield: {
-        type: Number,
-        required: true,
-        min: 0
-    },
-    predictedYield: {
-        type: Number,
-        min: 0
-    },
-    date: {
-        type: Date,
-        default: Date.now
-    },
-    notes: {
-        type: String,
-        maxlength: 500
-    }
-}, { _id: true });
-
-const userSchema = new mongoose.Schema({
+const userSchema = new Schema({
+    // Unique phone number for authentication and identification
     phone: {
         type: String,
         required: true,
         unique: true,
-        match: /^\+[1-9]\d{1,14}$/ // E.164 format validation
+        trim: true,
+        validate: {
+            validator: function(v) {
+                return /^\+\d{10,15}$/.test(v); // E.164 format validation
+            },
+            message: 'Phone number must be in E.164 format (e.g., +919876543210)'
+        }
     },
+    
+    // Optional recovery email for account recovery
     recoveryEmail: {
         type: String,
-        match: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, // Basic email validation
-        sparse: true // Allows multiple null values
-    },
-    location: {
-        latitude: {
-            type: Number,
-            min: -90,
-            max: 90
-        },
-        longitude: {
-            type: Number,
-            min: -180,
-            max: 180
-        },
-        state: {
-            type: String,
-            trim: true
-        },
-        district: {
-            type: String,
-            trim: true
-        },
-        address: {
-            type: String,
-            trim: true,
-            maxlength: 200
+        trim: true,
+        lowercase: true,
+        validate: {
+            validator: function(v) {
+                return !v || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+            },
+            message: 'Please provide a valid email address'
         }
     },
-    farmDetails: {
-        farmSize: {
-            type: Number,
-            min: 0.1
-        },
-        primaryCrop: {
-            type: String,
-            enum: ['rice', 'wheat', 'corn', 'cotton', 'sugarcane', 'soybean', 'tomato', 'potato', 'onion', 'other']
-        },
-        farmingType: {
-            type: String,
-            enum: ['organic', 'conventional', 'mixed'],
-            default: 'conventional'
-        }
-    },
+    
+    // OTP verification status
     otpVerified: {
         type: Boolean,
         default: false
     },
-    isActive: {
-        type: Boolean,
-        default: true
+    
+    // User's preferred language for recommendations
+    language: {
+        type: String,
+        default: 'en',
+        enum: ['en', 'hi', 'te', 'ta', 'kn', 'mr', 'gu', 'or']
     },
-    history: [cropYieldRecordSchema],
-    preferences: {
-        language: {
-            type: String,
-            enum: ['en', 'hi', 'mr', 'kn', 'te', 'ta', 'gu'],
-            default: 'en'
+    
+    // Farmer's location for weather and regional recommendations
+    location: {
+        // GPS coordinates for precise location-based services
+        lat: {
+            type: Number,
+            min: -90,
+            max: 90
         },
-        notifications: {
-            weather: { type: Boolean, default: true },
-            recommendations: { type: Boolean, default: true },
-            predictions: { type: Boolean, default: true }
+        lon: {
+            type: Number,
+            min: -180,
+            max: 180
+        },
+        // Administrative location details
+        village: String,
+        district: String,
+        state: String,
+        country: {
+            type: String,
+            default: 'India'
         }
     },
-    lastLogin: {
-        type: Date,
-        default: Date.now
+    
+    // Initial crop information captured during onboarding
+    initialCropInfo: {
+        crop: {
+            type: String,
+            trim: true
+        },
+        sowingDate: Date,
+        acres: {
+            type: Number,
+            min: 0.1,
+            max: 10000
+        }
+    },
+    
+    // Context tracking for user actions and farming activities
+    context: {
+        // New/current farming season activities
+        new: [{
+            action: {
+                type: String,
+                required: true,
+                trim: true
+            },
+            note: {
+                type: String,
+                trim: true
+            },
+            timestamp: {
+                type: Date,
+                default: Date.now
+            },
+            status: {
+                type: String,
+                enum: ['planned', 'ongoing', 'completed', 'skipped'],
+                default: 'planned'
+            }
+        }],
+        // Historical/previous season activities
+        old: [{
+            action: {
+                type: String,
+                required: true,
+                trim: true
+            },
+            note: {
+                type: String,
+                trim: true
+            },
+            timestamp: {
+                type: Date,
+                required: true
+            },
+            status: {
+                type: String,
+                enum: ['planned', 'ongoing', 'completed', 'skipped'],
+                default: 'completed'
+            }
+        }]
     }
 }, {
-    timestamps: true, // Adds createdAt and updatedAt
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true }
+    timestamps: true, // Adds createdAt and updatedAt fields
+    collection: 'users'
 });
 
-// Indexes for better query performance
-// Note: phone index is automatically created by unique: true
+// Indexes for efficient queries
+userSchema.index({ phone: 1 }, { unique: true });
+
+// Create 2dsphere index for geospatial queries if coordinates are present
+userSchema.index({ 'location.lat': 1, 'location.lon': 1 }, { 
+    sparse: true,
+    '2dsphere': true 
+});
+
+// Index for location-based queries
 userSchema.index({ 'location.state': 1, 'location.district': 1 });
-userSchema.index({ createdAt: -1 });
 
-// Virtual for user's full location
+// Virtual for getting user's full location string
 userSchema.virtual('fullLocation').get(function() {
-    if (this.location.district && this.location.state) {
-        return `${this.location.district}, ${this.location.state}`;
-    }
-    return this.location.state || 'Location not set';
+    const parts = [this.location.village, this.location.district, this.location.state].filter(Boolean);
+    return parts.join(', ');
 });
 
-// Method to add crop yield record
-userSchema.methods.addYieldRecord = function(recordData) {
-    this.history.push(recordData);
-    return this.save();
-};
-
-// Method to get recent yield records
-userSchema.methods.getRecentYields = function(limit = 10) {
-    return this.history
-        .sort((a, b) => b.date - a.date)
-        .slice(0, limit);
+// Method to check if user has completed onboarding
+userSchema.methods.isOnboardingComplete = function() {
+    return this.otpVerified && 
+           this.initialCropInfo.crop && 
+           this.location.lat && 
+           this.location.lon;
 };
 
 // Static method to find users by location
-userSchema.statics.findByLocation = function(state, district = null) {
-    const query = { 'location.state': state };
-    if (district) {
-        query['location.district'] = district;
-    }
-    return this.find(query);
+userSchema.statics.findByLocation = function(state, district) {
+    return this.find({
+        'location.state': state,
+        ...(district && { 'location.district': district })
+    });
 };
 
-// Pre-save middleware
-userSchema.pre('save', function(next) {
-    if (this.isModified('phone')) {
-        this.lastLogin = new Date();
-    }
-    next();
-});
-
 module.exports = mongoose.model('User', userSchema);
+
+/*
+Sample JSON document:
+{
+    "_id": "507f1f77bcf86cd799439011",
+    "phone": "+919876543210",
+    "recoveryEmail": "farmer@example.com",
+    "otpVerified": true,
+    "language": "hi",
+    "location": {
+        "lat": 20.2961,
+        "lon": 85.8245,
+        "village": "Bhubaneswar",
+        "district": "Khordha",
+        "state": "Odisha",
+        "country": "India"
+    },
+    "initialCropInfo": {
+        "crop": "Rice",
+        "sowingDate": "2023-06-15T00:00:00.000Z",
+        "acres": 5.5
+    },
+    "context": {
+        "new": [
+            {
+                "action": "Apply fertilizer",
+                "note": "NPK fertilizer for vegetative growth",
+                "timestamp": "2023-07-20T10:30:00.000Z",
+                "status": "completed",
+                "_id": "507f1f77bcf86cd799439012"
+            }
+        ],
+        "old": [
+            {
+                "action": "Land preparation",
+                "note": "Plowing and leveling completed",
+                "timestamp": "2023-05-15T08:00:00.000Z",
+                "status": "completed",
+                "_id": "507f1f77bcf86cd799439013"
+            }
+        ]
+    },
+    "createdAt": "2023-05-01T00:00:00.000Z",
+    "updatedAt": "2023-07-20T10:30:00.000Z"
+}
+*/

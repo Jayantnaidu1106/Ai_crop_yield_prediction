@@ -1,92 +1,79 @@
 // routes/weather.routes.js
+// Weather data management routes
 
 const express = require('express');
 const router = express.Router();
-const {
-    createWeatherLog,
-    getWeatherLogs,
-    getLastNDaysWeather,
-    getWeatherSummary,
-    updateWeatherLog,
-    deleteWeatherLog,
-    getWeatherRange,
-    bulkCreateWeatherLogs
-} = require('../controllers/weather.controller');
-const {
-    authenticateToken,
-    requireOTPVerification,
-    validateResourceOwnership
-} = require('../middleware/auth');
-const { validateWeatherLog, validateBulkWeatherLogs } = require('../middleware/validation');
+const WeatherLog = require('../models/WeatherLog');
 
-/**
- * @route   POST /api/weather
- * @desc    Create new weather log
- * @access  Private (requires authentication and OTP verification)
- */
-router.post('/', authenticateToken, requireOTPVerification, validateWeatherLog, createWeatherLog);
+// GET /api/weather/logs/:farmerId - Get weather logs for a farmer
+router.get('/logs/:farmerId', async (req, res) => {
+    try {
+        const { limit = 50, days = 30 } = req.query;
+        
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - parseInt(days));
+        
+        const logs = await WeatherLog.find({
+            farmerId: req.params.farmerId,
+            recorded_at: { $gte: startDate }
+        })
+        .sort({ recorded_at: -1 })
+        .limit(parseInt(limit))
+        .populate('farmerId', 'name location');
+        
+        res.json({ success: true, data: logs });
+    } catch (error) {
+        res.status(500).json({ message: 'Server error', error: error.message });
+    }
+});
 
-/**
- * @route   POST /api/weather/bulk
- * @desc    Bulk create weather logs (for API imports)
- * @access  Private (requires authentication and OTP verification)
- */
-router.post('/bulk', authenticateToken, requireOTPVerification, validateBulkWeatherLogs, bulkCreateWeatherLogs);
+// POST /api/weather/logs - Create new weather log
+router.post('/logs', async (req, res) => {
+    try {
+        const weatherLog = new WeatherLog(req.body);
+        await weatherLog.save();
+        
+        res.status(201).json({ 
+            success: true, 
+            message: 'Weather log created successfully',
+            data: weatherLog 
+        });
+    } catch (error) {
+        res.status(400).json({ message: 'Failed to create weather log', error: error.message });
+    }
+});
 
-/**
- * @route   GET /api/weather
- * @desc    Get weather logs for authenticated farmer
- * @access  Private (requires authentication and OTP verification)
- * @query   days, limit, page, startDate, endDate, source
- */
-router.get('/', authenticateToken, requireOTPVerification, getWeatherLogs);
-
-/**
- * @route   GET /api/weather/last/:days
- * @desc    Get last N days of weather logs
- * @access  Private (requires authentication and OTP verification)
- */
-router.get('/last/:days', authenticateToken, requireOTPVerification, getLastNDaysWeather);
-
-/**
- * @route   GET /api/weather/summary
- * @desc    Get weather summary/statistics
- * @access  Private (requires authentication and OTP verification)
- * @query   days
- */
-router.get('/summary', authenticateToken, requireOTPVerification, getWeatherSummary);
-
-/**
- * @route   GET /api/weather/range
- * @desc    Get weather data for specific date range
- * @access  Private (requires authentication and OTP verification)
- * @query   startDate, endDate (required)
- */
-router.get('/range', authenticateToken, requireOTPVerification, getWeatherRange);
-
-/**
- * @route   PUT /api/weather/:id
- * @desc    Update weather log
- * @access  Private (requires authentication, OTP verification, and ownership)
- */
-router.put('/:id', 
-    authenticateToken, 
-    requireOTPVerification, 
-    validateResourceOwnership(),
-    validateWeatherLog,
-    updateWeatherLog
-);
-
-/**
- * @route   DELETE /api/weather/:id
- * @desc    Delete weather log
- * @access  Private (requires authentication, OTP verification, and ownership)
- */
-router.delete('/:id', 
-    authenticateToken, 
-    requireOTPVerification, 
-    validateResourceOwnership(),
-    deleteWeatherLog
-);
+// GET /api/weather/summary/:farmerId - Get weather summary
+router.get('/summary/:farmerId', async (req, res) => {
+    try {
+        const { days = 30 } = req.query;
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - parseInt(days));
+        
+        const summary = await WeatherLog.aggregate([
+            {
+                $match: {
+                    farmerId: require('mongoose').Types.ObjectId(req.params.farmerId),
+                    recorded_at: { $gte: startDate }
+                }
+            },
+            {
+                $group: {
+                    _id: null,
+                    avgTemperature: { $avg: '$temperature' },
+                    avgHumidity: { $avg: '$humidity' },
+                    totalRainfall: { $sum: '$rainfall' },
+                    maxTemperature: { $max: '$temperature' },
+                    minTemperature: { $min: '$temperature' },
+                    recordCount: { $sum: 1 }
+                }
+            }
+        ]);
+        
+        res.json({ success: true, data: summary[0] || {} });
+    } catch (error) {
+        res.status(500).json({ message: 'Server error', error: error.message });
+    }
+});
 
 module.exports = router;

@@ -1,304 +1,349 @@
-// models/YieldPrediction.js
+// Backend/models/YieldPrediction.js
+// ML-based crop yield prediction tracking model
 
 const mongoose = require('mongoose');
+const Schema = mongoose.Schema;
 
-const inputParametersSchema = new mongoose.Schema({
-    rainfall: { type: Number, min: 0 },
-    temperature: { type: Number, min: -50, max: 60 },
-    humidity: { type: Number, min: 0, max: 100 },
-    soilType: { type: String },
-    cropAge: { type: Number, min: 0 },
-    fertilizer: { type: Number, min: 0 },
-    pesticide: { type: Number, min: 0 },
-    farmSize: { type: Number, min: 0.1 },
-    irrigationType: { 
-        type: String, 
-        enum: ['drip', 'sprinkler', 'flood', 'manual', 'rainfed'] 
-    },
-    soilPH: { type: Number, min: 0, max: 14 },
-    organicMatter: { type: Number, min: 0, max: 100 }
-}, { _id: false });
-
-const confidenceMetricsSchema = new mongoose.Schema({
-    accuracy: { type: Number, min: 0, max: 1 },
-    confidence: { type: Number, min: 0, max: 1 },
-    modelScore: { type: Number, min: 0, max: 1 },
-    dataQuality: { 
-        type: String, 
-        enum: ['excellent', 'good', 'fair', 'poor'],
-        default: 'good'
-    }
-}, { _id: false });
-
-const yieldPredictionSchema = new mongoose.Schema({
+const yieldPredictionSchema = new Schema({
+    // Reference to the farmer
     farmerId: {
-        type: mongoose.Schema.Types.ObjectId,
+        type: Schema.Types.ObjectId,
         ref: 'User',
-        required: true
+        required: true,
+        index: true
     },
+    
+    // Crop type for this prediction
     crop: {
         type: String,
         required: true,
-        enum: ['rice', 'wheat', 'corn', 'cotton', 'sugarcane', 'soybean', 'tomato', 'potato', 'onion', 'other']
+        trim: true,
+        lowercase: true,
+        enum: [
+            'rice', 'wheat', 'maize', 'sugarcane', 'cotton', 'soybean', 
+            'groundnut', 'sunflower', 'mustard', 'barley', 'millets', 
+            'pulses', 'tomato', 'onion', 'potato', 'banana', 'coconut', 'tea', 'coffee'
+        ]
     },
+    
+    // Growing season identifier
     season: {
         type: String,
         required: true,
-        enum: ['kharif', 'rabi', 'summer', 'winter']
+        trim: true,
+        enum: ['kharif', 'rabi', 'summer', 'perennial'],
+        validate: {
+            validator: function(v) {
+                // Perennial crops like coconut, banana should only use 'perennial'
+                const perennialCrops = ['coconut', 'banana', 'tea', 'coffee'];
+                const seasonalCrops = ['rice', 'wheat', 'maize', 'sugarcane', 'cotton'];
+                
+                if (perennialCrops.includes(this.crop)) {
+                    return v === 'perennial';
+                }
+                return ['kharif', 'rabi', 'summer'].includes(v);
+            },
+            message: 'Invalid season for the specified crop type'
+        }
     },
-    year: {
+    
+    // Predicted yield in tons per hectare
+    predictedYield: {
         type: Number,
         required: true,
-        min: 2020,
-        max: 2050
-    },
-    predictedYield: {
-        value: {
-            type: Number,
-            required: true,
-            min: 0
-        },
-        unit: {
-            type: String,
-            enum: ['kg/hectare', 'tons/hectare', 'quintals/hectare'],
-            default: 'kg/hectare'
-        },
-        range: {
-            min: { type: Number, min: 0 },
-            max: { type: Number, min: 0 }
+        min: [0, 'Predicted yield cannot be negative'],
+        max: [100, 'Predicted yield seems unrealistically high'],
+        validate: {
+            validator: function(v) {
+                // Different crops have different typical yield ranges
+                const yieldRanges = {
+                    rice: { min: 0.5, max: 15 },
+                    wheat: { min: 0.5, max: 8 },
+                    maize: { min: 0.5, max: 12 },
+                    sugarcane: { min: 5, max: 150 }, // Higher yields for sugarcane
+                    cotton: { min: 0.1, max: 3 },
+                    soybean: { min: 0.3, max: 6 }
+                };
+                
+                const range = yieldRanges[this.crop];
+                if (range) {
+                    return v >= range.min && v <= range.max;
+                }
+                return true; // No specific validation for other crops
+            },
+            message: 'Predicted yield is outside typical range for this crop'
         }
     },
-    actualYield: {
-        value: {
-            type: Number,
-            min: 0
-        },
-        unit: {
-            type: String,
-            enum: ['kg/hectare', 'tons/hectare', 'quintals/hectare'],
-            default: 'kg/hectare'
-        },
-        recordedAt: {
-            type: Date
-        }
-    },
-    inputParameters: inputParametersSchema,
-    confidenceMetrics: confidenceMetricsSchema,
+    
+    // ML model version used for prediction
     modelVersion: {
         type: String,
         required: true,
-        default: '1.0.0'
-    },
-    modelType: {
-        type: String,
-        enum: ['random_forest', 'neural_network', 'linear_regression', 'ensemble'],
-        default: 'random_forest'
-    },
-    predictionDate: {
-        type: Date,
-        default: Date.now
-    },
-    harvestDate: {
-        expected: {
-            type: Date
-        },
-        actual: {
-            type: Date
+        trim: true,
+        validate: {
+            validator: function(v) {
+                // Version should follow semantic versioning (e.g., v1.0.0, v2.1.3)
+                return /^v\d+\.\d+\.\d+$/.test(v);
+            },
+            message: 'Model version must follow semantic versioning format (e.g., v1.0.0)'
         }
     },
+    
+    // When the prediction was made
+    predicted_at: {
+        type: Date,
+        default: Date.now,
+        required: true,
+        validate: {
+            validator: function(v) {
+                return v <= new Date();
+            },
+            message: 'Prediction date cannot be in the future'
+        }
+    },
+    
+    // Model confidence score (0-100%)
+    confidence: {
+        type: Number,
+        required: true,
+        min: [0, 'Confidence cannot be negative'],
+        max: [100, 'Confidence cannot exceed 100%'],
+        validate: {
+            validator: function(v) {
+                // Round to 2 decimal places
+                return Number(v.toFixed(2)) === v;
+            },
+            message: 'Confidence should have at most 2 decimal places'
+        }
+    },
+    
+    // Expected harvest date based on crop cycle
+    expected_harvest_date: {
+        type: Date,
+        required: true,
+        validate: {
+            validator: function(v) {
+                // Harvest date should be in the future
+                return v > new Date();
+            },
+            message: 'Expected harvest date must be in the future'
+        }
+    },
+    
+    // Additional prediction metadata
+    predictionData: {
+        // Input features used for prediction
+        features: {
+            type: Schema.Types.Mixed,
+            default: {}
+        },
+        
+        // Weather data at time of prediction
+        weatherSnapshot: {
+            temperature_avg: {
+                type: Number,
+                min: -50,
+                max: 60
+            },
+            humidity_avg: {
+                type: Number,
+                min: 0,
+                max: 100
+            },
+            rainfall_total: {
+                type: Number,
+                min: 0,
+                max: 5000
+            }
+        },
+        
+        // Soil and farm conditions
+        farmConditions: {
+            soil_type: {
+                type: String,
+                enum: ['clay', 'sandy', 'loamy', 'silty', 'black', 'red', 'alluvial']
+            },
+            irrigation_type: {
+                type: String,
+                enum: ['rainfed', 'drip', 'sprinkler', 'flood', 'furrow']
+            },
+            area_hectares: {
+                type: Number,
+                min: 0.1,
+                max: 1000
+            }
+        }
+    },
+    
+    // Actual yield (to be filled after harvest)
+    actualYield: {
+        type: Number,
+        min: [0, 'Actual yield cannot be negative'],
+        max: [100, 'Actual yield seems unrealistically high'],
+        default: null
+    },
+    
+    // Date when actual yield was recorded
+    yield_recorded_at: {
+        type: Date,
+        validate: {
+            validator: function(v) {
+                return !v || v <= new Date();
+            },
+            message: 'Yield recording date cannot be in the future'
+        }
+    },
+    
+    // Accuracy of prediction (calculated after harvest)
+    accuracy: {
+        type: Number,
+        min: [0, 'Accuracy cannot be negative'],
+        max: [100, 'Accuracy cannot exceed 100%'],
+        default: null
+    },
+    
+    // Status of the prediction lifecycle
     status: {
         type: String,
-        enum: ['pending', 'active', 'completed', 'cancelled'],
-        default: 'active'
-    },
-    location: {
-        latitude: { type: Number, min: -90, max: 90 },
-        longitude: { type: Number, min: -180, max: 180 },
-        state: { type: String },
-        district: { type: String }
-    },
-    weatherData: {
-        source: { type: String },
-        lastUpdated: { type: Date },
-        summary: { type: String, maxlength: 200 }
-    },
-    recommendations: [{
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Recommendation'
-    }],
-    notes: {
-        type: String,
-        maxlength: 500
-    },
-    tags: [{
-        type: String,
-        trim: true,
-        maxlength: 50
-    }]
+        enum: ['predicted', 'growing', 'harvested', 'verified'],
+        default: 'predicted',
+        required: true
+    }
 }, {
-    timestamps: true,
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true }
+    timestamps: true, // Adds createdAt and updatedAt fields
+    collection: 'yield_predictions'
 });
 
-// Indexes for efficient queries
-yieldPredictionSchema.index({ farmerId: 1, predictionDate: -1 });
-yieldPredictionSchema.index({ farmerId: 1, crop: 1, season: 1, year: 1 });
-yieldPredictionSchema.index({ crop: 1, season: 1, year: 1 });
-yieldPredictionSchema.index({ status: 1 });
-yieldPredictionSchema.index({ 'location.state': 1, 'location.district': 1 });
+// Compound index for farmer's crop predictions by season
+yieldPredictionSchema.index({ farmerId: 1, crop: 1, season: 1 });
 
-// Virtual for accuracy calculation (if actual yield is available)
-yieldPredictionSchema.virtual('accuracy').get(function() {
-    if (!this.actualYield.value || !this.predictedYield.value) {
-        return null;
+// Index for finding predictions by harvest date
+yieldPredictionSchema.index({ expected_harvest_date: 1, status: 1 });
+
+// Index for model performance analysis
+yieldPredictionSchema.index({ modelVersion: 1, status: 1 });
+
+// Index for recent predictions
+yieldPredictionSchema.index({ predicted_at: -1 });
+
+// Virtual to calculate days until harvest
+yieldPredictionSchema.virtual('daysToHarvest').get(function() {
+    if (!this.expected_harvest_date) return null;
+    const today = new Date();
+    const timeDiff = this.expected_harvest_date.getTime() - today.getTime();
+    return Math.ceil(timeDiff / (1000 * 3600 * 24));
+});
+
+// Virtual to check if prediction is overdue for verification
+yieldPredictionSchema.virtual('isOverdueVerification').get(function() {
+    if (this.status === 'verified') return false;
+    const today = new Date();
+    return this.expected_harvest_date < today;
+});
+
+// Pre-save middleware to calculate accuracy when actual yield is recorded
+yieldPredictionSchema.pre('save', function(next) {
+    if (this.actualYield !== null && this.predictedYield && this.accuracy === null) {
+        // Calculate accuracy as percentage of how close prediction was
+        const error = Math.abs(this.actualYield - this.predictedYield);
+        const avgYield = (this.actualYield + this.predictedYield) / 2;
+        this.accuracy = Math.max(0, 100 - (error / avgYield * 100));
+        this.accuracy = Number(this.accuracy.toFixed(2));
+        
+        if (!this.yield_recorded_at) {
+            this.yield_recorded_at = new Date();
+        }
     }
-    
-    const predicted = this.predictedYield.value;
-    const actual = this.actualYield.value;
-    const error = Math.abs(predicted - actual) / actual;
-    return Math.max(0, 1 - error); // Accuracy as percentage
+    next();
 });
 
-// Virtual for prediction error
-yieldPredictionSchema.virtual('predictionError').get(function() {
-    if (!this.actualYield.value || !this.predictedYield.value) {
-        return null;
-    }
-    
-    return ((this.predictedYield.value - this.actualYield.value) / this.actualYield.value) * 100;
-});
-
-// Virtual for days until harvest
-yieldPredictionSchema.virtual('daysUntilHarvest').get(function() {
-    if (!this.harvestDate.expected) {
-        return null;
-    }
-    
-    const now = new Date();
-    const diffTime = this.harvestDate.expected - now;
-    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-});
-
-// Method to update actual yield
-yieldPredictionSchema.methods.updateActualYield = function(actualValue, unit = 'kg/hectare') {
-    this.actualYield = {
-        value: actualValue,
-        unit: unit,
-        recordedAt: new Date()
-    };
-    this.status = 'completed';
+// Instance method to record actual yield
+yieldPredictionSchema.methods.recordActualYield = function(actualYield) {
+    this.actualYield = actualYield;
+    this.yield_recorded_at = new Date();
+    this.status = 'harvested';
     return this.save();
 };
 
-// Method to add recommendation
-yieldPredictionSchema.methods.addRecommendation = function(recommendationId) {
-    if (!this.recommendations.includes(recommendationId)) {
-        this.recommendations.push(recommendationId);
-        return this.save();
-    }
-    return Promise.resolve(this);
+// Instance method to verify prediction
+yieldPredictionSchema.methods.verify = function() {
+    this.status = 'verified';
+    return this.save();
 };
 
-// Static method to get predictions by farmer and crop
-yieldPredictionSchema.statics.getByFarmerAndCrop = function(farmerId, crop, limit = 10) {
+// Static method to get predictions for a crop and season
+yieldPredictionSchema.statics.getByCropSeason = function(farmerId, crop, season) {
     return this.find({
         farmerId: farmerId,
-        crop: crop
-    })
-    .sort({ predictionDate: -1 })
-    .limit(limit)
-    .populate('recommendations');
-};
-
-// Static method to get active predictions
-yieldPredictionSchema.statics.getActivePredictions = function(farmerId) {
-    return this.find({
-        farmerId: farmerId,
-        status: 'active'
-    })
-    .sort({ predictionDate: -1 })
-    .populate('recommendations');
-};
-
-// Static method to get predictions for current season
-yieldPredictionSchema.statics.getCurrentSeasonPredictions = function(farmerId, season, year) {
-    return this.find({
-        farmerId: farmerId,
-        season: season,
-        year: year
-    })
-    .sort({ predictionDate: -1 })
-    .populate('recommendations');
+        crop: crop,
+        season: season
+    }).sort({ predicted_at: -1 });
 };
 
 // Static method to get model performance statistics
-yieldPredictionSchema.statics.getModelPerformance = function(modelVersion, crop = null) {
-    const matchQuery = {
-        modelVersion: modelVersion,
-        'actualYield.value': { $exists: true },
-        'predictedYield.value': { $exists: true }
-    };
-    
-    if (crop) {
-        matchQuery.crop = crop;
-    }
-    
+yieldPredictionSchema.statics.getModelStats = function(modelVersion) {
     return this.aggregate([
-        { $match: matchQuery },
-        {
-            $addFields: {
-                accuracy: {
-                    $subtract: [
-                        1,
-                        {
-                            $divide: [
-                                { $abs: { $subtract: ['$predictedYield.value', '$actualYield.value'] } },
-                                '$actualYield.value'
-                            ]
-                        }
-                    ]
-                }
-            }
-        },
+        { $match: { modelVersion: modelVersion, accuracy: { $ne: null } } },
         {
             $group: {
-                _id: null,
+                _id: '$modelVersion',
                 avgAccuracy: { $avg: '$accuracy' },
+                avgConfidence: { $avg: '$confidence' },
                 totalPredictions: { $sum: 1 },
-                avgPredictedYield: { $avg: '$predictedYield.value' },
-                avgActualYield: { $avg: '$actualYield.value' }
+                accurateCount: { $sum: { $cond: [{ $gte: ['$accuracy', 80] }, 1, 0] } }
             }
         }
     ]);
 };
 
-// Pre-save middleware
-yieldPredictionSchema.pre('save', function(next) {
-    // Auto-set harvest date if not provided (estimate based on crop and season)
-    if (!this.harvestDate.expected && this.crop && this.season) {
-        const harvestDate = new Date(this.predictionDate);
-        
-        // Add estimated growing period based on crop type
-        const growingPeriods = {
-            'rice': 120,
-            'wheat': 150,
-            'corn': 100,
-            'cotton': 180,
-            'sugarcane': 365,
-            'soybean': 100,
-            'tomato': 80,
-            'potato': 90,
-            'onion': 120,
-            'other': 120
-        };
-        
-        const days = growingPeriods[this.crop] || 120;
-        harvestDate.setDate(harvestDate.getDate() + days);
-        this.harvestDate.expected = harvestDate;
-    }
+// Static method to get pending harvests
+yieldPredictionSchema.statics.getPendingHarvests = function(days = 30) {
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + days);
     
-    next();
-});
+    return this.find({
+        expected_harvest_date: { $lte: futureDate },
+        status: { $in: ['predicted', 'growing'] }
+    }).populate('farmerId', 'name phone location');
+};
 
 module.exports = mongoose.model('YieldPrediction', yieldPredictionSchema);
+
+/*
+Sample JSON document:
+{
+    "_id": "507f1f77bcf86cd799439020",
+    "farmerId": "507f1f77bcf86cd799439011",
+    "crop": "rice",
+    "season": "kharif",
+    "predictedYield": 6.75,
+    "modelVersion": "v2.1.0",
+    "predicted_at": "2023-07-01T10:30:00.000Z",
+    "confidence": 87.25,
+    "expected_harvest_date": "2023-11-15T00:00:00.000Z",
+    "predictionData": {
+        "features": {
+            "soil_nitrogen": 45.2,
+            "rainfall_prediction": 1250,
+            "temperature_avg": 28.5,
+            "humidity_avg": 75
+        },
+        "weatherSnapshot": {
+            "temperature_avg": 29.1,
+            "humidity_avg": 78.3,
+            "rainfall_total": 45.5
+        },
+        "farmConditions": {
+            "soil_type": "alluvial",
+            "irrigation_type": "flood",
+            "area_hectares": 2.5
+        }
+    },
+    "actualYield": 6.42,
+    "yield_recorded_at": "2023-11-18T14:20:00.000Z",
+    "accuracy": 95.12,
+    "status": "verified",
+    "createdAt": "2023-07-01T10:30:00.000Z",
+    "updatedAt": "2023-11-20T09:15:00.000Z"
+}
+*/
