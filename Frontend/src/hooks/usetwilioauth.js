@@ -42,16 +42,18 @@ export const useTwilioAuth = () => {
             const response = await fetch(`${API_BASE_URL}/api/auth/verify-otp`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    phoneNumber: userNumber, 
-                    otpCode: otpCode 
+                body: JSON.stringify({
+                    phoneNumber: userNumber,
+                    otpCode: otpCode
                 }),
             });
 
             const data = await response.json();
-            
+
             if (data.success) {
-                login(data.token); 
+                // Backend returns token in data.data.token
+                const token = data.data?.token || data.token;
+                login(token);
                 return { success: true };
             } else {
                 return { success: false, error: data.message || 'Invalid or expired code. Check your SMS.' };

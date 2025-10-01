@@ -2,11 +2,12 @@
 
 import React, { useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useDataFetcher, useRecommendations } from '../hooks/useTwilioAuth'; // Use the placeholder hooks
+import { useDataFetcher } from '../hooks/usedatafetcher';
+import { useRecommendations } from '../hooks/userecommendations';
 
 function Dashboard() {
     const { logout } = useAuth();
-    const { data: metrics, fetchMetrics, isLoading: loadingMetrics } = useDataFetcher();
+    const { data: metrics, fetchData: fetchMetrics, isLoading: loadingMetrics } = useDataFetcher();
     const { recommendations, fetchRecommendations, isLoading: loadingRecs } = useRecommendations();
 
     useEffect(() => {
