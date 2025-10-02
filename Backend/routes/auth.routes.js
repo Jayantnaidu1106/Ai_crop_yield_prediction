@@ -11,4 +11,7 @@ router.post('/send-otp', validatePhoneNumber, authController.sendOTP);
 // Route for Step 2: Checking the code
 router.post('/verify-otp', validateOTPVerification, authController.verifyOTP);
 
+// Route for Step 3: User Signup (Save user data after OTP verification)
+router.post('/signup', authController.signup);
+
 module.exports = router;

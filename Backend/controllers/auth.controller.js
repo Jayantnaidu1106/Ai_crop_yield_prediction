@@ -121,3 +121,54 @@ exports.verifyOTP = async (req, res) => {
         }
     }
 };
+
+
+// --- Step 3: Signup (Save User Data) ---
+exports.signup = async (req, res) => {
+    const { fullName, phoneNumber, whatsappUpdates, farmSize, primaryCrop } = req.body;
+
+    try {
+        // Validate required fields
+        if (!fullName || !phoneNumber) {
+            return res.status(400).json({
+                success: false,
+                message: 'Full name and phone number are required.'
+            });
+        }
+
+        // TODO: Save user data to database
+        // For now, we'll just return success
+        // In a real application, you would:
+        // 1. Check if user already exists
+        // 2. Save user data to database
+        // 3. Generate and return JWT token
+
+        console.log('New user signup:', {
+            fullName,
+            phoneNumber,
+            whatsappUpdates,
+            farmSize,
+            primaryCrop
+        });
+
+        // Generate JWT token for the new user
+        const token = generateAuthToken(phoneNumber);
+
+        return res.status(201).json({
+            success: true,
+            message: 'Registration successful! Welcome to KrishiMitra AI.',
+            data: {
+                token: token,
+                phoneNumber: phoneNumber,
+                fullName: fullName,
+                expiresIn: '7d'
+            }
+        });
+    } catch (error) {
+        console.error('Error during signup:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'An error occurred during registration. Please try again.'
+        });
+    }
+};

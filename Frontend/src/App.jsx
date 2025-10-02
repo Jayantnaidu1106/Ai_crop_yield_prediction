@@ -5,6 +5,8 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AuthProvider, useAuth } from './context/AuthContext';
 import AuthPage from './pages/AuthPage';
 import Dashboard from './pages/Dashboard';
+import SplashPage from './pages/SplashPage';
+import SignUpPage from './pages/SignUpPage';
 
 // Custom component to protect routes that require authentication
 const ProtectedRoute = ({ children }) => {
@@ -17,22 +19,25 @@ function App() {
         <AuthProvider>
             <Router>
                 <Routes>
+                    {/* Landing Page - Splash Screen with Language Selection */}
+                    <Route path="/" element={<SplashPage />} />
+
                     {/* Public Route for Login/Sign Up */}
                     <Route path="/login" element={<AuthPage />} />
-                    
+                    <Route path="/signup" element={<SignUpPage />} />
+
                     {/* Protected Route for Main App Content */}
-                    <Route 
-                        path="/dashboard" 
+                    <Route
+                        path="/dashboard"
                         element={
                             <ProtectedRoute>
                                 <Dashboard />
                             </ProtectedRoute>
-                        } 
+                        }
                     />
-                    
-                    {/* Redirects */}
-                    <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                    <Route path="*" element={<Navigate to="/dashboard" replace />} />
+
+                    {/* Redirect all unknown routes to splash page */}
+                    <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
             </Router>
         </AuthProvider>

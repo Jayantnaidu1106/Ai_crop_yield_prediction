@@ -29,7 +29,7 @@ function AuthPage() {
     return (
         <div className="auth-page-wrapper">
             <div className="auth-card">
-                <p>Welcome! New user? <button onClick={() => setFlow('signup')}>Sign Up</button></p>
+                
                 {renderFlow()}
             </div>
         </div>
