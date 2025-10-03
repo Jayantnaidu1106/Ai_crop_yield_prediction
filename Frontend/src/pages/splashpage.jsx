@@ -21,6 +21,8 @@ function SplashPage() {
 
     const handleProceed = () => {
         console.log(`Language selected: ${selectedLanguage}. Proceeding to login.`);
+        // Store selected language in localStorage for later use
+        localStorage.setItem('selectedLanguage', selectedLanguage);
         navigate('/login'); 
     };
 

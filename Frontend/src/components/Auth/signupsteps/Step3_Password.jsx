@@ -5,20 +5,89 @@ import React, { useState } from 'react';
 function Step3_FarmSetup({ formData, updateFormData, submitFinalForm, prevStep }) {
     const [localData, setLocalData] = useState(formData);
     const [isLoading, setIsLoading] = useState(false);
+    const [locationLoading, setLocationLoading] = useState(false);
 
     const handleChange = (e) => {
         setLocalData({ ...localData, [e.target.name]: e.target.value });
+    };
+
+    // Auto-detect current location for farm location
+    const detectCurrentLocation = () => {
+        setLocationLoading(true);
+        
+        if (!navigator.geolocation) {
+            alert('Geolocation is not supported by your browser');
+            setLocationLoading(false);
+            return;
+        }
+
+        navigator.geolocation.getCurrentPosition(
+            async (position) => {
+                const { latitude, longitude } = position.coords;
+                
+                try {
+                    // Reverse geocoding to get address from coordinates
+                    const response = await fetch(
+                        `https://api.openweathermap.org/geo/1.0/reverse?lat=${latitude}&lon=${longitude}&limit=1&appid=7ddc55e1f217ce54924dcf61d7c42580`
+                    );
+                    const data = await response.json();
+                    
+                    if (data.length > 0) {
+                        const location = data[0];
+                        setLocalData(prev => ({
+                            ...prev,
+                            farmLocation: {
+                                city: location.name,
+                                state: location.state,
+                                country: location.country,
+                                latitude: latitude,
+                                longitude: longitude,
+                                address: `${location.name}, ${location.state}, ${location.country}`
+                            }
+                        }));
+                    }
+                } catch (error) {
+                    console.error('Error getting location details:', error);
+                    // Still save coordinates even if reverse geocoding fails
+                    setLocalData(prev => ({
+                        ...prev,
+                        farmLocation: {
+                            latitude: latitude,
+                            longitude: longitude,
+                            address: `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`
+                        }
+                    }));
+                }
+                setLocationLoading(false);
+            },
+            (error) => {
+                console.error('Error getting location:', error);
+                alert('Unable to get your current location. Please enter manually.');
+                setLocationLoading(false);
+            },
+            { enableHighAccuracy: true, timeout: 10000 }
+        );
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setIsLoading(true);
 
+        // Ensure farm location is properly formatted
+        const finalData = {
+            ...localData,
+            farmLocation: localData.farmLocation || {
+                city: localData.farmCity || '',
+                state: localData.farmState || '',
+                country: 'India'
+            }
+        };
+
         // Update form data before final submission
-        updateFormData(localData);
+        updateFormData(finalData);
 
         // Final Submission: All data is collected
-        await submitFinalForm(localData);
+        await submitFinalForm(finalData);
 
         setIsLoading(false);
     };
@@ -41,14 +110,89 @@ function Step3_FarmSetup({ formData, updateFormData, submitFinalForm, prevStep }
                 required
             />
 
-            {/* Map/Location Placeholder */}
-            <div className="relative w-full h-40 bg-white/20 border border-white/30 rounded-xl overflow-hidden shadow-md backdrop-blur-sm">
-                <div className="flex items-center justify-center h-full text-white/70 text-sm [text-shadow:1px_1px_1px_rgba(0,0,0,0.5)]">
-                    [Click to Pin Farm Location]
+            {/* Farm Location Input */}
+            <div className="space-y-4">
+                <label className="text-sm font-medium text-white/90 mb-1 block [text-shadow:1px_1px_1px_rgba(0,0,0,0.4)]">
+                    Farm Location:
+                </label>
+                
+                {/* Current Location Button */}
+                <button
+                    type="button"
+                    onClick={detectCurrentLocation}
+                    disabled={locationLoading}
+                    className="w-full px-4 py-3 bg-blue-600 text-white font-medium rounded-xl hover:bg-blue-700 transition duration-150 shadow-md disabled:bg-gray-500 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+                >
+                    {locationLoading ? (
+                        <>
+                            <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            <span>Getting Location...</span>
+                        </>
+                    ) : (
+                        <>
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                            </svg>
+                            <span>Use Current Location</span>
+                        </>
+                    )}
+                </button>
+
+                {/* Manual Location Input */}
+                <div className="grid grid-cols-2 gap-4">
+                    <input
+                        name="farmCity"
+                        type="text"
+                        placeholder="City"
+                        value={localData.farmLocation?.city || localData.farmCity || ''}
+                        onChange={(e) => {
+                            handleChange(e);
+                            setLocalData(prev => ({
+                                ...prev,
+                                farmLocation: {
+                                    ...prev.farmLocation,
+                                    city: e.target.value
+                                }
+                            }));
+                        }}
+                        className="px-4 py-3 border border-white/50 rounded-xl bg-white/80 focus:border-green-500 focus:ring-2 focus:ring-green-500 transition duration-150 shadow-sm"
+                        required
+                    />
+                    <input
+                        name="farmState"
+                        type="text"
+                        placeholder="State"
+                        value={localData.farmLocation?.state || localData.farmState || ''}
+                        onChange={(e) => {
+                            handleChange(e);
+                            setLocalData(prev => ({
+                                ...prev,
+                                farmLocation: {
+                                    ...prev.farmLocation,
+                                    state: e.target.value
+                                }
+                            }));
+                        }}
+                        className="px-4 py-3 border border-white/50 rounded-xl bg-white/80 focus:border-green-500 focus:ring-2 focus:ring-green-500 transition duration-150 shadow-sm"
+                        required
+                    />
                 </div>
-                <span className="absolute top-3 right-3 p-2 bg-white/70 rounded-full shadow-md cursor-pointer">
-                    <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-                </span>
+
+                {/* Display detected location */}
+                {localData.farmLocation?.address && (
+                    <div className="p-3 bg-green-600/20 border border-green-500/30 rounded-lg text-white/90 text-sm">
+                        <div className="flex items-center space-x-2">
+                            <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            <span>Farm Location: {localData.farmLocation.address}</span>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Primary Crop Selection */}

@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import Step1_UserInfo from '../components/Auth/signupsteps/Step1_UserInfo';
 import Step2_VerifyOTP from '../components/Auth/signupsteps/Step2_VerifyOTP';
 import Step3_FarmSetup from '../components/Auth/signupsteps/Step3_Password';
@@ -10,6 +11,7 @@ import krishiMitraLogo from '../assets/krishi-mitra-logo.jpg';
 
 function SignUpPage() {
     const navigate = useNavigate();
+    const { updateFarmLocation } = useAuth();
     const [currentStep, setCurrentStep] = useState(1);
     const [formData, setFormData] = useState({
         fullName: '',
@@ -44,6 +46,11 @@ function SignUpPage() {
             const data = await response.json();
 
             if (response.ok && data.success) {
+                // Save farm location to auth context
+                if (finalData.farmLocation) {
+                    updateFarmLocation(finalData.farmLocation);
+                }
+                
                 alert('Registration successful! Please login with your phone number.');
                 navigate('/login'); 
             } else {

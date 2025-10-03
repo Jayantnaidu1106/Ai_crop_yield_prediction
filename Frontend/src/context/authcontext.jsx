@@ -10,6 +10,9 @@ export const AuthProvider = ({ children }) => {
     const [authToken, setAuthToken] = useState(localStorage.getItem('token'));
     const [userNumber, setUserNumber] = useState(null); 
     const [isAuthenticated, setIsAuthenticated] = useState(!!authToken);
+    const [farmLocation, setFarmLocation] = useState(
+        JSON.parse(localStorage.getItem('farmLocation')) || null
+    );
 
     const login = (token) => {
         localStorage.setItem('token', token);
@@ -19,12 +22,28 @@ export const AuthProvider = ({ children }) => {
 
     const logout = () => {
         localStorage.removeItem('token');
+        localStorage.removeItem('farmLocation');
         setAuthToken(null);
+        setFarmLocation(null);
         setIsAuthenticated(false);
     };
 
+    const updateFarmLocation = (location) => {
+        localStorage.setItem('farmLocation', JSON.stringify(location));
+        setFarmLocation(location);
+    };
+
     return (
-        <AuthContext.Provider value={{ isAuthenticated, authToken, login, logout, userNumber, setUserNumber }}>
+        <AuthContext.Provider value={{ 
+            isAuthenticated, 
+            authToken, 
+            login, 
+            logout, 
+            userNumber, 
+            setUserNumber,
+            farmLocation,
+            updateFarmLocation
+        }}>
             {children}
         </AuthContext.Provider>
     );

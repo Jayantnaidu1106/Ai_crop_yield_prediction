@@ -104,12 +104,12 @@ function Login({ onOTPSent }) {
                 <div className="mt-8 pt-4 border-t border-white/50 text-center text-sm">
                     <p className="text-white/80 [text-shadow:1px_1px_1px_rgba(0,0,0,0.5)]">
                         New user?
-                        <button
-                            onClick={() => window.location.href = '/signup'}
+                        <a
+                            href="/signup"
                             className="text-yellow-300 font-bold hover:text-yellow-200 ml-1 underline"
                         >
                             Register Here
-                        </button>
+                        </a>
                     </p>
                 </div>
             </div>
