@@ -1,12 +1,177 @@
 // controllers/weather.controller.js
 
+const { WeatherLog, User } = require('../models');
 const weatherService = require('../services/weather.service');
+const axios = require('axios');
 
 class WeatherController {
+    /**
+     * Log weather data for user's location
+     */
+    async logWeatherData(req, res) {
+        try {
+            const user = await User.findById(req.userId);
+            if (!user) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'User not found'
+                });
+            }
+
+            const { latitude, longitude } = user.location;
+            
+            // Fetch current weather from OpenWeatherMap
+            const weatherResponse = await axios.get(
+                `https://api.openweathermap.org/data/2.5/weather?lat=${latitude}&lon=${longitude}&appid=${process.env.OPENWEATHER_API_KEY}&units=metric`
+            );
+
+            const weatherData = weatherResponse.data;
+            
+            // Create weather log entry
+            const weatherLog = new WeatherLog({
+                userId: req.userId,
+                location: user.location,
+                date: new Date(),
+                temperature: {
+                    current: weatherData.main.temp,
+                    min: weatherData.main.temp_min,
+                    max: weatherData.main.temp_max,
+                    feelsLike: weatherData.main.feels_like
+                },
+                humidity: weatherData.main.humidity,
+                pressure: weatherData.main.pressure,
+                windSpeed: weatherData.wind?.speed || 0,
+                windDirection: weatherData.wind?.deg || 0,
+                weatherCondition: weatherData.weather[0].main,
+                weatherDescription: weatherData.weather[0].description,
+                cloudCover: weatherData.clouds.all,
+                visibility: weatherData.visibility ? weatherData.visibility / 1000 : null,
+                uvIndex: 0,
+                rainfall: weatherData.rain?.['1h'] || 0,
+                source: 'openweathermap'
+            });
+
+            await weatherLog.save();
+
+            res.status(201).json({
+                success: true,
+                message: 'Weather data logged successfully',
+                data: {
+                    weatherLog: {
+                        id: weatherLog._id,
+                        date: weatherLog.date,
+                        temperature: weatherLog.temperature,
+                        weatherCondition: weatherLog.weatherCondition,
+                        rainfall: weatherLog.rainfall,
+                        humidity: weatherLog.humidity
+                    }
+                }
+            });
+
+        } catch (error) {
+            console.error('Log weather data error:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Failed to log weather data',
+                error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+            });
+        }
+    }
+
     /**
      * Get current weather by coordinates
      */
     async getCurrentWeather(req, res) {
+        try {
+            const user = await User.findById(req.userId);
+            if (!user) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'User not found'
+                });
+            }
+
+            const { latitude, longitude } = user.location;
+            
+            // Fetch current weather
+            const weatherResponse = await axios.get(
+                `https://api.openweathermap.org/data/2.5/weather?lat=${latitude}&lon=${longitude}&appid=${process.env.OPENWEATHER_API_KEY}&units=metric`
+            );
+
+            const weatherData = weatherResponse.data;
+
+            // Also fetch forecast for next few hours
+            const forecastResponse = await axios.get(
+                `https://api.openweathermap.org/data/2.5/forecast?lat=${latitude}&lon=${longitude}&appid=${process.env.OPENWEATHER_API_KEY}&units=metric&cnt=8`
+            );
+
+            const forecastData = forecastResponse.data;
+
+            const currentWeather = {
+                location: {
+                    name: weatherData.name,
+                    country: weatherData.sys.country,
+                    coordinates: {
+                        latitude: weatherData.coord.lat,
+                        longitude: weatherData.coord.lon
+                    }
+                },
+                current: {
+                    temperature: weatherData.main.temp,
+                    temperatureMin: weatherData.main.temp_min,
+                    temperatureMax: weatherData.main.temp_max,
+                    feelsLike: weatherData.main.feels_like,
+                    humidity: weatherData.main.humidity,
+                    pressure: weatherData.main.pressure,
+                    windSpeed: weatherData.wind?.speed || 0,
+                    windDirection: weatherData.wind?.deg || 0,
+                    weatherCondition: weatherData.weather[0].main,
+                    weatherDescription: weatherData.weather[0].description,
+                    weatherIcon: weatherData.weather[0].icon,
+                    cloudCover: weatherData.clouds.all,
+                    visibility: weatherData.visibility ? weatherData.visibility / 1000 : null,
+                    rainfall: weatherData.rain?.['1h'] || 0,
+                    sunrise: new Date(weatherData.sys.sunrise * 1000),
+                    sunset: new Date(weatherData.sys.sunset * 1000)
+                },
+                forecast: forecastData.list.map(item => ({
+                    time: new Date(item.dt * 1000),
+                    temperature: item.main.temp,
+                    weatherCondition: item.weather[0].main,
+                    weatherDescription: item.weather[0].description,
+                    weatherIcon: item.weather[0].icon,
+                    rainfall: item.rain?.['3h'] || 0,
+                    windSpeed: item.wind.speed
+                }))
+            };
+
+            res.status(200).json({
+                success: true,
+                data: currentWeather
+            });
+
+        } catch (error) {
+            console.error('Get current weather error:', error);
+            
+            if (error.response?.status === 401) {
+                return res.status(401).json({
+                    success: false,
+                    message: 'Invalid API key for weather service'
+                });
+            }
+
+            res.status(500).json({
+                success: false,
+                message: 'Failed to fetch current weather',
+                error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+            });
+        }
+    }
+
+    /**
+     * Get current weather by coordinates (public endpoint)
+     */
+    async getCurrentWeatherByCoordinates(req, res) {
         try {
             const { lat, lon } = req.query;
 

@@ -125,9 +125,22 @@ exports.verifyOTP = async (req, res) => {
 
 // --- Step 3: Signup (Save User Data) ---
 exports.signup = async (req, res) => {
-    const { fullName, phoneNumber, whatsappUpdates, farmSize, primaryCrop } = req.body;
+    const { 
+        fullName, 
+        phoneNumber, 
+        whatsappUpdates, 
+        farmSize, 
+        primaryCrop, 
+        farmLocation, 
+        recoveryEmail, 
+        farmingExperience 
+    } = req.body;
 
     try {
+        // Import User model
+        const { User } = require('../models');
+        const { generateToken, generateRefreshToken } = require('../middleware/auth');
+
         // Validate required fields
         if (!fullName || !phoneNumber) {
             return res.status(400).json({
@@ -136,39 +149,124 @@ exports.signup = async (req, res) => {
             });
         }
 
-        // TODO: Save user data to database
-        // For now, we'll just return success
-        // In a real application, you would:
-        // 1. Check if user already exists
-        // 2. Save user data to database
-        // 3. Generate and return JWT token
+        // Check if user already exists
+        const existingUser = await User.findOne({ phone: phoneNumber });
+        if (existingUser) {
+            return res.status(409).json({
+                success: false,
+                message: 'User with this phone number already exists'
+            });
+        }
 
-        console.log('New user signup:', {
+        // Create location object from farmLocation - ensure state and district are required
+        let location = null;
+        if (farmLocation) {
+            // Validate required location fields
+            if (!farmLocation.state || !farmLocation.district) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'State and district are required for farm location'
+                });
+            }
+
+            location = {
+                latitude: farmLocation.latitude ? parseFloat(farmLocation.latitude) : null,
+                longitude: farmLocation.longitude ? parseFloat(farmLocation.longitude) : null,
+                state: farmLocation.state.trim(),
+                district: farmLocation.district.trim(),
+                village: farmLocation.village ? farmLocation.village.trim() : undefined,
+                pincode: farmLocation.pincode ? farmLocation.pincode.trim() : undefined,
+                address: farmLocation.address ? farmLocation.address.trim() : undefined
+            };
+
+            // Remove undefined fields to keep the document clean
+            Object.keys(location).forEach(key => {
+                if (location[key] === undefined) {
+                    delete location[key];
+                }
+            });
+        } else {
+            return res.status(400).json({
+                success: false,
+                message: 'Farm location is required'
+            });
+        }
+
+        // Create new user in database
+        const userData = {
+            phone: phoneNumber,
             fullName,
-            phoneNumber,
-            whatsappUpdates,
-            farmSize,
-            primaryCrop
-        });
+            location,
+            whatsappUpdates: whatsappUpdates || false,
+            language: 'en',
+            otpVerified: true, // Since OTP was already verified in previous step
+            isActive: true
+        };
 
-        // Generate JWT token for the new user
-        const token = generateAuthToken(phoneNumber);
+        // Add optional fields if provided
+        if (farmSize && !isNaN(parseFloat(farmSize))) {
+            userData.farmSize = parseFloat(farmSize);
+        }
+        
+        if (primaryCrop && primaryCrop.trim() !== '') {
+            userData.primaryCrop = primaryCrop.trim();
+        }
+        
+        if (recoveryEmail && recoveryEmail.trim() !== '') {
+            userData.recoveryEmail = recoveryEmail.trim().toLowerCase();
+        }
+        
+        if (farmingExperience && !isNaN(parseInt(farmingExperience))) {
+            userData.farmingExperience = parseInt(farmingExperience);
+        }
+
+        const user = new User(userData);
+
+        await user.save();
+
+        // Generate proper JWT tokens using our auth middleware
+        const token = generateToken(user._id);
+        const refreshToken = generateRefreshToken(user._id);
+
+        console.log('New user registered:', {
+            id: user._id,
+            fullName: user.fullName,
+            phone: user.phone,
+            location: user.location
+        });
 
         return res.status(201).json({
             success: true,
             message: 'Registration successful! Welcome to KrishiMitra AI.',
             data: {
-                token: token,
-                phoneNumber: phoneNumber,
-                fullName: fullName,
+                user: {
+                    id: user._id,
+                    phone: user.phone,
+                    fullName: user.fullName,
+                    location: user.location,
+                    profileCompleted: user.profileCompleted
+                },
+                token,
+                refreshToken,
                 expiresIn: '7d'
             }
         });
+
     } catch (error) {
         console.error('Error during signup:', error);
+        
+        if (error.name === 'ValidationError') {
+            return res.status(400).json({
+                success: false,
+                message: 'Validation error',
+                errors: Object.values(error.errors).map(err => err.message)
+            });
+        }
+
         return res.status(500).json({
             success: false,
-            message: 'An error occurred during registration. Please try again.'
+            message: 'An error occurred during registration. Please try again.',
+            error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
         });
     }
 };

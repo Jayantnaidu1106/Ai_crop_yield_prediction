@@ -34,14 +34,16 @@ function Step3_FarmSetup({ formData, updateFormData, submitFinalForm, prevStep }
                     
                     if (data.length > 0) {
                         const location = data[0];
+                        // Structure according to backend schema
                         setLocalData(prev => ({
                             ...prev,
                             farmLocation: {
-                                city: location.name,
-                                state: location.state,
-                                country: location.country,
                                 latitude: latitude,
                                 longitude: longitude,
+                                state: location.state || '',
+                                district: location.name || '', // Use name as district if available
+                                village: '',
+                                pincode: '',
                                 address: `${location.name}, ${location.state}, ${location.country}`
                             }
                         }));
@@ -54,6 +56,10 @@ function Step3_FarmSetup({ formData, updateFormData, submitFinalForm, prevStep }
                         farmLocation: {
                             latitude: latitude,
                             longitude: longitude,
+                            state: '',
+                            district: '',
+                            village: '',
+                            pincode: '',
                             address: `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`
                         }
                     }));
@@ -142,31 +148,13 @@ function Step3_FarmSetup({ formData, updateFormData, submitFinalForm, prevStep }
                     )}
                 </button>
 
-                {/* Manual Location Input */}
+                {/* Manual Location Input - Updated to match backend schema */}
                 <div className="grid grid-cols-2 gap-4">
                     <input
-                        name="farmCity"
+                        name="state"
                         type="text"
-                        placeholder="City"
-                        value={localData.farmLocation?.city || localData.farmCity || ''}
-                        onChange={(e) => {
-                            handleChange(e);
-                            setLocalData(prev => ({
-                                ...prev,
-                                farmLocation: {
-                                    ...prev.farmLocation,
-                                    city: e.target.value
-                                }
-                            }));
-                        }}
-                        className="px-4 py-3 border border-white/50 rounded-xl bg-white/80 focus:border-green-500 focus:ring-2 focus:ring-green-500 transition duration-150 shadow-sm"
-                        required
-                    />
-                    <input
-                        name="farmState"
-                        type="text"
-                        placeholder="State"
-                        value={localData.farmLocation?.state || localData.farmState || ''}
+                        placeholder="State *"
+                        value={localData.farmLocation?.state || localData.state || ''}
                         onChange={(e) => {
                             handleChange(e);
                             setLocalData(prev => ({
@@ -180,7 +168,83 @@ function Step3_FarmSetup({ formData, updateFormData, submitFinalForm, prevStep }
                         className="px-4 py-3 border border-white/50 rounded-xl bg-white/80 focus:border-green-500 focus:ring-2 focus:ring-green-500 transition duration-150 shadow-sm"
                         required
                     />
+                    <input
+                        name="district"
+                        type="text"
+                        placeholder="District *"
+                        value={localData.farmLocation?.district || localData.district || ''}
+                        onChange={(e) => {
+                            handleChange(e);
+                            setLocalData(prev => ({
+                                ...prev,
+                                farmLocation: {
+                                    ...prev.farmLocation,
+                                    district: e.target.value
+                                }
+                            }));
+                        }}
+                        className="px-4 py-3 border border-white/50 rounded-xl bg-white/80 focus:border-green-500 focus:ring-2 focus:ring-green-500 transition duration-150 shadow-sm"
+                        required
+                    />
                 </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                    <input
+                        name="village"
+                        type="text"
+                        placeholder="Village (Optional)"
+                        value={localData.farmLocation?.village || localData.village || ''}
+                        onChange={(e) => {
+                            handleChange(e);
+                            setLocalData(prev => ({
+                                ...prev,
+                                farmLocation: {
+                                    ...prev.farmLocation,
+                                    village: e.target.value
+                                }
+                            }));
+                        }}
+                        className="px-4 py-3 border border-white/50 rounded-xl bg-white/80 focus:border-green-500 focus:ring-2 focus:ring-green-500 transition duration-150 shadow-sm"
+                    />
+                    <input
+                        name="pincode"
+                        type="text"
+                        placeholder="Pincode (Optional)"
+                        maxLength="6"
+                        value={localData.farmLocation?.pincode || localData.pincode || ''}
+                        onChange={(e) => {
+                            const value = e.target.value.replace(/\D/g, ''); // Only allow digits
+                            handleChange(e);
+                            setLocalData(prev => ({
+                                ...prev,
+                                farmLocation: {
+                                    ...prev.farmLocation,
+                                    pincode: value
+                                }
+                            }));
+                        }}
+                        className="px-4 py-3 border border-white/50 rounded-xl bg-white/80 focus:border-green-500 focus:ring-2 focus:ring-green-500 transition duration-150 shadow-sm"
+                    />
+                </div>
+
+                {/* Additional Address Field */}
+                <input
+                    name="address"
+                    type="text"
+                    placeholder="Full Address (Optional)"
+                    value={localData.farmLocation?.address || localData.address || ''}
+                    onChange={(e) => {
+                        handleChange(e);
+                        setLocalData(prev => ({
+                            ...prev,
+                            farmLocation: {
+                                ...prev.farmLocation,
+                                address: e.target.value
+                            }
+                        }));
+                    }}
+                    className="px-4 py-3 border border-white/50 rounded-xl bg-white/80 focus:border-green-500 focus:ring-2 focus:ring-green-500 transition duration-150 shadow-sm"
+                />
 
                 {/* Display detected location */}
                 {localData.farmLocation?.address && (
@@ -195,6 +259,16 @@ function Step3_FarmSetup({ formData, updateFormData, submitFinalForm, prevStep }
                 )}
             </div>
 
+            {/* Recovery Email (Optional) */}
+            <input
+                name="recoveryEmail"
+                type="email"
+                placeholder="Recovery Email (Optional)"
+                value={localData.recoveryEmail || ''}
+                onChange={handleChange}
+                className="w-full px-5 py-3 border border-white/50 rounded-xl bg-white/80 focus:border-green-500 focus:ring-2 focus:ring-green-500 transition duration-150 shadow-sm"
+            />
+
             {/* Primary Crop Selection */}
             <div className="relative">
                 <label className="text-sm font-medium text-white/90 mb-1 block [text-shadow:1px_1px_1px_rgba(0,0,0,0.4)]">Primary Crop:</label>
@@ -207,14 +281,33 @@ function Step3_FarmSetup({ formData, updateFormData, submitFinalForm, prevStep }
                 >
                     <option value="" disabled>Select Primary Crop</option>
                     <option value="rice">Rice (धान)</option>
+                    <option value="wheat">Wheat (गेहूं)</option>
                     <option value="cotton">Cotton (कपास)</option>
                     <option value="sugarcane">Sugarcane (गन्ना)</option>
                     <option value="maize">Maize (मक्का)</option>
+                    <option value="jowar">Jowar (ज्वार)</option>
+                    <option value="bajra">Bajra (बाजरा)</option>
+                    <option value="arhar">Arhar (अरहर)</option>
+                    <option value="groundnut">Groundnut (मूंगफली)</option>
+                    <option value="soybean">Soybean (सोयाबीन)</option>
+                    <option value="other">Other</option>
                 </select>
                 <div className="absolute inset-y-0 right-0 top-6 flex items-center pr-3 pointer-events-none">
                     <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
                 </div>
             </div>
+
+            {/* Farming Experience */}
+            <input
+                name="farmingExperience"
+                type="number"
+                placeholder="Farming Experience (Years, Optional)"
+                min="0"
+                max="100"
+                value={localData.farmingExperience || ''}
+                onChange={handleChange}
+                className="w-full px-5 py-3 border border-white/50 rounded-xl bg-white/80 focus:border-green-500 focus:ring-2 focus:ring-green-500 transition duration-150 shadow-sm"
+            />
 
             <div className="flex justify-between space-x-4 pt-4">
                 <button
