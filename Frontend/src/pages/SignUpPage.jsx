@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import Step1_UserInfo from '../components/Auth/signupsteps/Step1_UserInfo';
 import Step2_VerifyOTP from '../components/Auth/signupsteps/Step2_VerifyOTP';
@@ -10,6 +11,7 @@ import backgroundImage from '../assets/farm-background.jpg';
 import krishiMitraLogo from '../assets/krishi-mitra-logo.jpg';
 
 function SignUpPage() {
+    const { t } = useTranslation();
     const navigate = useNavigate();
     const { updateFarmLocation } = useAuth();
     const [currentStep, setCurrentStep] = useState(1);

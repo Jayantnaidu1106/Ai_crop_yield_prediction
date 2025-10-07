@@ -1,74 +1,33 @@
 // src/pages/SplashPage.jsx
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from '../context/LanguageContext';
+import LanguageSelector from '../components/UI/LanguageSelector';
 
 // Import the assets (Ensure these paths are correct in your setup)
 import splashBackground from '../assets/farm-background.jpg'; 
-import krishiMitraLogo from '../assets/krishi-mitra-logo.jpg'; 
-
-// Define the available languages for the selector component
-const LANGUAGES = [
-    { code: 'en', name: 'English', flag: '🇬🇧' },
-    { code: 'hi', name: 'हिन्दी', flag: '' },
-    { code: 'mr', name: 'मराठी', flag: '' },
-    { code: 'te', name: 'తెలుగు', flag: '' } 
-];
+import krishiMitraLogo from '../assets/krishi-mitra-logo.jpg';
 
 function SplashPage() {
     const navigate = useNavigate();
-    const [selectedLanguage, setSelectedLanguage] = useState('en');
+    const { t } = useTranslation();
+    const { currentLanguage, getCurrentLanguageDetails } = useLanguage();
+    const [isLoading, setIsLoading] = useState(false);
 
-    const handleProceed = () => {
-        console.log(`Language selected: ${selectedLanguage}. Proceeding to login.`);
-        // Store selected language in localStorage for later use
-        localStorage.setItem('selectedLanguage', selectedLanguage);
-        navigate('/login'); 
+    const handleProceed = async () => {
+        setIsLoading(true);
+        console.log(`Language selected: ${currentLanguage}. Proceeding to login.`);
+        
+        // Small delay for UX
+        setTimeout(() => {
+            navigate('/login');
+            setIsLoading(false);
+        }, 500);
     };
 
-    // --- Language Selector Component ---
-    const LanguageSelector = () => (
-        <div className="w-full space-y-3"> {/* Slightly reduced vertical space */}
-            {/* Primary (English) Dropdown - Premium Glass Style */}
-            <div className="relative w-full bg-white/20 backdrop-blur-md border-2 border-white/40 rounded-xl shadow-lg transition-all duration-300 hover:bg-white/30">
-                <select
-                    value={selectedLanguage}
-                    onChange={(e) => setSelectedLanguage(e.target.value)}
-                    className="appearance-none w-full p-4 text-lg font-semibold text-gray-800 bg-transparent border-none focus:outline-none cursor-pointer rounded-xl"
-                >
-                    {LANGUAGES.map(lang => (
-                        <option key={lang.code} value={lang.code}>
-                            {lang.flag} {lang.name}
-                        </option>
-                    ))}
-                </select>
-                {/* Custom Down Arrow Icon */}
-                <div className="absolute inset-y-0 right-0 flex items-center pr-4 pointer-events-none">
-                    <svg className="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M19 9l-7 7-7-7"></path></svg>
-                </div>
-            </div>
 
-            {/* Secondary Language Row (Inline display for regional languages) */}
-            <div className="flex justify-between space-x-2 p-2 bg-white/20 backdrop-blur-sm border-2 border-white/40 rounded-xl shadow-lg">
-                {['hi', 'mr', 'te'].map(code => {
-                    const lang = LANGUAGES.find(l => l.code === code);
-                    return (
-                        <button
-                            key={code}
-                            onClick={() => setSelectedLanguage(code)}
-                            className={`flex-1 p-3 text-md font-bold rounded-lg transition duration-200 ease-in-out transform hover:scale-[1.03] ${
-                                selectedLanguage === code
-                                    ? 'bg-green-600 text-white shadow-md border-2 border-white/50'
-                                    : 'text-gray-800 bg-white/40 hover:bg-white/50'
-                            }`}
-                        >
-                            {lang.name}
-                        </button>
-                    );
-                })}
-            </div>
-        </div>
-    );
 
     // --- Main Page Render ---
     return (
@@ -103,7 +62,7 @@ function SplashPage() {
                             textShadow: '0 4px 15px rgba(0,0,0,0.6), 0 0 10px rgba(255,255,255,0.5)'
                         }}
                     >
-                        KrishiMitra AI
+                        {t('splash.welcomeTitle')}
                     </h1>
                     
                     {/* Tagline */}
@@ -113,23 +72,41 @@ function SplashPage() {
                             textShadow: '0 2px 4px rgba(0,0,0,0.5)'
                         }}
                     >
-                        Data-Driven Farming
+                        {t('splash.welcomeSubtitle')}
                     </p>
                 </div>
                 
                 {/* Language Selector Section */}
                 <div className="mb-10 w-full">
-                    <LanguageSelector />
+                    <div className="text-center mb-4">
+                        <p className="text-white font-semibold text-lg mb-3" style={{ textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>
+                            {t('splash.selectLanguage')}
+                        </p>
+                    </div>
+                    <LanguageSelector 
+                        variant="splash" 
+                        className="w-full" 
+                        dropdownAlign="left"
+                    />
                 </div>
                 
                 {/* CTA Button */}
                 <button 
                     onClick={handleProceed} 
+                    disabled={isLoading}
                     className="w-full py-4 bg-gradient-to-r from-green-600 via-green-500 to-green-600 text-white font-black text-xl tracking-wide rounded-xl 
                                 shadow-xl shadow-green-500/40 transition-all duration-300 ease-out 
-                                transform hover:scale-[1.02] hover:shadow-2xl active:scale-[0.98]"
+                                transform hover:scale-[1.02] hover:shadow-2xl active:scale-[0.98]
+                                disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
                 >
-                    Proceed
+                    {isLoading ? (
+                        <div className="flex items-center justify-center space-x-2">
+                            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                            <span>{t('common.loading')}</span>
+                        </div>
+                    ) : (
+                        t('splash.getStarted')
+                    )}
                 </button>
             </div>
         </div>
