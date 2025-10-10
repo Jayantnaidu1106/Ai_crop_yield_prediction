@@ -9,6 +9,7 @@ import CleanDashboard from './pages/CleanDashboard';
 import SplashPage from './pages/splashpage';
 import SignUpPage from './pages/SignUpPage';
 import SettingsPage from './pages/SettingsPage';
+import MLPredictionForm from './components/MLPredictionForm';
 import './i18n'; // Import i18n configuration
 
 // Custom component to protect routes that require authentication
@@ -46,6 +47,16 @@ function App() {
                             element={
                                 <ProtectedRoute>
                                     <SettingsPage />
+                                </ProtectedRoute>
+                            }
+                        />
+
+                        {/* Protected Route for ML Predictions */}
+                        <Route
+                            path="/predictions"
+                            element={
+                                <ProtectedRoute>
+                                    <MLPredictionForm />
                                 </ProtectedRoute>
                             }
                         />

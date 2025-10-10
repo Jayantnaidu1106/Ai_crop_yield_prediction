@@ -21,11 +21,26 @@ function generateAuthToken(phoneNumber) {
 }
 
 
-// --- Step 1: Send OTP ---
+// --- Step 1: Send OTP for Login (Check if user exists) ---
 exports.sendOTP = async (req, res) => {
     const { phoneNumber } = req.body;
 
     try {
+        // Import User model
+        const { User } = require('../models');
+
+        // Check if user exists
+        const existingUser = await User.findOne({ phone: phoneNumber });
+        
+        if (!existingUser) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found. Please register first.',
+                userExists: false
+            });
+        }
+
+        // User exists, send OTP for login
         const result = await sendVerificationCode(phoneNumber);
 
         if (result.status === 'pending') {
@@ -34,7 +49,8 @@ exports.sendOTP = async (req, res) => {
                 message: 'Verification code sent successfully.',
                 data: {
                     phoneNumber: phoneNumber,
-                    status: result.status
+                    status: result.status,
+                    userExists: true
                 }
             });
         } else {
@@ -71,24 +87,106 @@ exports.sendOTP = async (req, res) => {
     }
 };
 
+// --- Send OTP for Registration (New users) ---
+exports.sendOTPForRegistration = async (req, res) => {
+    const { phoneNumber } = req.body;
 
-// --- Step 2: Verify OTP ---
+    try {
+        // Import User model
+        const { User } = require('../models');
+
+        // Check if user already exists
+        const existingUser = await User.findOne({ phone: phoneNumber });
+        
+        if (existingUser) {
+            return res.status(409).json({
+                success: false,
+                message: 'User with this phone number already exists. Please login instead.',
+                userExists: true
+            });
+        }
+
+        // User doesn't exist, send OTP for registration
+        const result = await sendVerificationCode(phoneNumber);
+
+        if (result.status === 'pending') {
+            return res.status(200).json({
+                success: true,
+                message: 'Verification code sent for registration.',
+                data: {
+                    phoneNumber: phoneNumber,
+                    status: result.status,
+                    userExists: false
+                }
+            });
+        } else {
+            return res.status(400).json({
+                success: false,
+                message: 'Failed to send verification code. Please try again.'
+            });
+        }
+    } catch (error) {
+        console.error('Error sending OTP for registration:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Internal server error. Please try again later.'
+        });
+    }
+};
+
+
+// --- Step 2: Verify OTP for Login ---
 exports.verifyOTP = async (req, res) => {
     const { phoneNumber, otpCode } = req.body;
 
     try {
+        // Import User model
+        const { User } = require('../models');
+        const { generateToken, generateRefreshToken } = require('../middleware/auth');
+
+        // Verify OTP with Twilio
         const verificationCheck = await checkVerificationCode(phoneNumber, otpCode);
 
         if (verificationCheck.status === 'approved') {
-            // SUCCESS: OTP is correct. Generate JWT for the login session.
-            const token = generateAuthToken(phoneNumber);
+            // Check if user exists in database
+            const user = await User.findOne({ phone: phoneNumber });
+            
+            if (!user) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'User not found. Please register first.',
+                    needsRegistration: true
+                });
+            }
+
+            // Update last login
+            user.lastLogin = new Date();
+            await user.save();
+
+            // Generate proper JWT tokens
+            const token = generateToken(user._id);
+            const refreshToken = generateRefreshToken(user._id);
 
             return res.status(200).json({
                 success: true,
-                message: 'OTP verification successful. User authenticated.',
+                message: 'Login successful. Welcome back!',
                 data: {
+                    user: {
+                        id: user._id,
+                        phone: user.phone,
+                        fullName: user.fullName,
+                        recoveryEmail: user.recoveryEmail,
+                        location: user.location,
+                        farmSize: user.farmSize,
+                        primaryCrop: user.primaryCrop,
+                        farmingExperience: user.farmingExperience,
+                        language: user.language,
+                        profileCompleted: user.profileCompleted,
+                        createdAt: user.createdAt,
+                        lastLogin: user.lastLogin
+                    },
                     token: token,
-                    phoneNumber: phoneNumber,
+                    refreshToken: refreshToken,
                     expiresIn: '7d'
                 }
             });
@@ -119,6 +217,51 @@ exports.verifyOTP = async (req, res) => {
                 message: 'An internal error occurred during verification. Please try again.'
             });
         }
+    }
+};
+
+// --- Verify OTP for Registration ---
+exports.verifyOTPForRegistration = async (req, res) => {
+    const { phoneNumber, otpCode } = req.body;
+
+    try {
+        // Import User model
+        const { User } = require('../models');
+
+        // Check if user already exists
+        const existingUser = await User.findOne({ phone: phoneNumber });
+        if (existingUser) {
+            return res.status(409).json({
+                success: false,
+                message: 'User already exists. Please login instead.'
+            });
+        }
+
+        // Verify OTP with Twilio
+        const verificationCheck = await checkVerificationCode(phoneNumber, otpCode);
+
+        if (verificationCheck.status === 'approved') {
+            return res.status(200).json({
+                success: true,
+                message: 'OTP verification successful. Please complete registration.',
+                data: {
+                    phoneNumber: phoneNumber,
+                    verified: true,
+                    readyForRegistration: true
+                }
+            });
+        } else {
+            return res.status(401).json({
+                success: false,
+                message: 'Invalid or expired OTP code. Please try again.'
+            });
+        }
+    } catch (error) {
+        console.error('Error verifying OTP for registration:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'An internal error occurred during verification. Please try again.'
+        });
     }
 };
 

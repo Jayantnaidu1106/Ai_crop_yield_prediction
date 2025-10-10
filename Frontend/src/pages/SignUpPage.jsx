@@ -3,7 +3,8 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/authcontext';
+import { useTwilioAuth } from '../hooks/useTwilioAuth';
 import Step1_UserInfo from '../components/Auth/signupsteps/Step1_UserInfo';
 import Step2_VerifyOTP from '../components/Auth/signupsteps/Step2_VerifyOTP';
 import Step3_FarmSetup from '../components/Auth/signupsteps/Step3_Password';
@@ -14,6 +15,7 @@ function SignUpPage() {
     const { t } = useTranslation();
     const navigate = useNavigate();
     const { updateFarmLocation } = useAuth();
+    const { completeRegistration } = useTwilioAuth();
     const [currentStep, setCurrentStep] = useState(1);
     const [formData, setFormData] = useState({
         fullName: '',
@@ -32,31 +34,26 @@ function SignUpPage() {
     const prevStep = () => setCurrentStep(currentStep - 1);
     const handleBackToLogin = () => navigate('/login');
 
-    // Final form submission (mock API call)
+    // Final form submission using new registration flow
     const submitFinalForm = async (finalData) => {
         setError('');
         setIsLoading(true);
 
         try {
-            // Note: Final data no longer includes a password field
-            const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/auth/signup`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(finalData),
-            });
+            // Use the new registration completion method
+            const result = await completeRegistration(finalData);
 
-            const data = await response.json();
-
-            if (response.ok && data.success) {
+            if (result.success) {
                 // Save farm location to auth context
                 if (finalData.farmLocation) {
                     updateFarmLocation(finalData.farmLocation);
                 }
                 
-                alert('Registration successful! Please login with your phone number.');
-                navigate('/login'); 
+                // User is automatically logged in after successful registration
+                alert('Registration successful! Welcome to KrishiMitra AI!');
+                navigate('/dashboard'); 
             } else {
-                setError(data.message || 'Registration failed. Please try again.');
+                setError(result.error || 'Registration failed. Please try again.');
             }
         } catch (err) {
             setError('Network error. Please check your connection and try again.');

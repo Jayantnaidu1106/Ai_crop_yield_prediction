@@ -10,22 +10,38 @@ export const AuthProvider = ({ children }) => {
     const [authToken, setAuthToken] = useState(localStorage.getItem('token'));
     const [userNumber, setUserNumber] = useState(null); 
     const [isAuthenticated, setIsAuthenticated] = useState(!!authToken);
+    const [userProfile, setUserProfile] = useState(
+        JSON.parse(localStorage.getItem('userProfile')) || null
+    );
     const [farmLocation, setFarmLocation] = useState(
         JSON.parse(localStorage.getItem('farmLocation')) || null
     );
 
-    const login = (token) => {
+    const login = (token, userData = null) => {
         localStorage.setItem('token', token);
         setAuthToken(token);
         setIsAuthenticated(true);
+        
+        // Store user profile if provided
+        if (userData) {
+            localStorage.setItem('userProfile', JSON.stringify(userData));
+            setUserProfile(userData);
+        }
     };
 
     const logout = () => {
         localStorage.removeItem('token');
         localStorage.removeItem('farmLocation');
+        localStorage.removeItem('userProfile');
         setAuthToken(null);
         setFarmLocation(null);
+        setUserProfile(null);
         setIsAuthenticated(false);
+    };
+
+    const updateUserProfile = (profile) => {
+        localStorage.setItem('userProfile', JSON.stringify(profile));
+        setUserProfile(profile);
     };
 
     const updateFarmLocation = (location) => {
@@ -41,6 +57,8 @@ export const AuthProvider = ({ children }) => {
             logout, 
             userNumber, 
             setUserNumber,
+            userProfile,
+            updateUserProfile,
             farmLocation,
             updateFarmLocation
         }}>

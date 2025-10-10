@@ -1,5 +1,9 @@
 // controllers/prediction.controller.js
 const { YieldPrediction, User, Recommendation } = require('../models');
+const axios = require('axios');
+
+// ML Service Configuration
+const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'http://localhost:5001';
 
 class PredictionController {
     // Create new yield prediction
@@ -55,7 +59,31 @@ class PredictionController {
                 });
             }
 
-            // Create prediction with AI/ML placeholder (in real scenario, this would call ML model)
+            // Get ML prediction from Python service
+            let mlPrediction = null;
+            let mlConfidence = 0.7;
+            
+            try {
+                const mlResponse = await this.callMLService(crop, season, year, farmSize, weatherData, {
+                    soilType,
+                    irrigationType,
+                    seedVariety
+                });
+                
+                if (mlResponse.success) {
+                    mlPrediction = mlResponse.prediction.predictedYield;
+                    mlConfidence = mlResponse.prediction.confidence;
+                } else {
+                    console.warn('ML service returned error, using fallback prediction');
+                }
+            } catch (error) {
+                console.error('ML service error, using fallback prediction:', error.message);
+            }
+            
+            // Use ML prediction or fallback to mock prediction
+            const finalPredictedYield = mlPrediction || expectedYield || this.generateMockPrediction(crop, farmSize, soilType);
+            
+            // Create prediction with ML results
             const prediction = new YieldPrediction({
                 userId: req.userId,
                 crop: crop.toLowerCase(),
@@ -70,9 +98,9 @@ class PredictionController {
                 weatherData,
                 farmingPractices,
                 
-                // Placeholder ML prediction (replace with actual ML model call)
-                predictedYield: expectedYield || this.generateMockPrediction(crop, farmSize, soilType),
-                confidenceScore: Math.random() * 0.3 + 0.7, // 70-100% confidence
+                // ML prediction results
+                predictedYield: finalPredictedYield,
+                confidenceScore: mlConfidence,
                 
                 marketPrice,
                 estimatedCost,
@@ -80,14 +108,14 @@ class PredictionController {
                 
                 // Calculate ROI if we have market price and cost
                 ...(marketPrice && estimatedCost && {
-                    roi: this.calculateROI(expectedYield || this.generateMockPrediction(crop, farmSize, soilType), marketPrice, estimatedCost)
+                    roi: this.calculateROI(finalPredictedYield, marketPrice, estimatedCost)
                 })
             });
 
             await prediction.save();
 
-            // Generate related recommendations based on prediction
-            await this.generateRecommendationsFromPrediction(prediction);
+            // Generate ML-based recommendations
+            await this.generateMLRecommendations(prediction, weatherData);
 
             res.status(201).json({
                 success: true,
@@ -491,7 +519,98 @@ class PredictionController {
         return Math.round(roi * 100) / 100;
     }
 
-    async generateRecommendationsFromPrediction(prediction) {
+    // ML Service Integration Methods
+    async callMLService(crop, season, year, farmSize, weatherData, additionalData = {}) {
+        try {
+            const mlInput = {
+                crop: crop.toLowerCase(),
+                season: season.toLowerCase(),
+                year: parseInt(year),
+                farmSize: parseFloat(farmSize),
+                temperature: weatherData.temperature || 25.0,
+                rainfall: weatherData.rainfall || 500.0,
+                soilPh: weatherData.soilPh || 6.5,
+                soilNitrogen: weatherData.soilNitrogen || 100.0,
+                soilPhosphorus: weatherData.soilPhosphorus || 50.0,
+                soilPotassium: weatherData.soilPotassium || 30.0,
+                state: weatherData.state || 'unknown',
+                district: weatherData.district || 'unknown',
+                ...additionalData
+            };
+
+            const response = await axios.post(`${ML_SERVICE_URL}/predict`, mlInput, {
+                timeout: 10000, // 10 second timeout
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            return response.data;
+        } catch (error) {
+            console.error('ML Service call failed:', error.message);
+            throw error;
+        }
+    }
+
+    async generateMLRecommendations(prediction, weatherData) {
+        try {
+            // Get ML-based recommendations
+            const recommendationsInput = {
+                predictedYield: prediction.predictedYield,
+                historicalAverage: 35.0, // Should come from database
+                rainfall: weatherData.rainfall || 500.0,
+                soilMoisture: weatherData.soilMoisture || 60.0,
+                soilNitrogen: weatherData.soilNitrogen || 100.0,
+                soilPhosphorus: weatherData.soilPhosphorus || 50.0,
+                humidity: weatherData.humidity || 75.0,
+                cropStage: weatherData.cropStage || 'Vegetative'
+            };
+
+            const response = await axios.post(`${ML_SERVICE_URL}/recommendations`, recommendationsInput, {
+                timeout: 10000,
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (response.data.success && response.data.recommendations) {
+                const mlRecommendations = response.data.recommendations.map(rec => ({
+                    userId: prediction.userId,
+                    title: `${rec.type}: ${rec.priority.toUpperCase()} Priority`,
+                    description: rec.advice,
+                    category: rec.type.toLowerCase().replace(' ', '_'),
+                    priority: rec.priority.toLowerCase(),
+                    tags: [rec.type.toLowerCase(), 'ml_generated', prediction.crop],
+                    relatedCrop: prediction.crop,
+                    season: prediction.season,
+                    metadata: {
+                        metric: rec.metric,
+                        mlGenerated: true,
+                        predictionId: prediction._id
+                    }
+                }));
+
+                // Create recommendations in database
+                if (mlRecommendations.length > 0) {
+                    const createdRecommendations = await Recommendation.insertMany(mlRecommendations);
+                    
+                    // Link recommendations to prediction
+                    prediction.recommendationIds = createdRecommendations.map(rec => rec._id);
+                    await prediction.save();
+                }
+            }
+
+            // Add fallback recommendations for edge cases
+            await this.generateFallbackRecommendations(prediction);
+
+        } catch (error) {
+            console.error('Error generating ML recommendations:', error.message);
+            // Fallback to basic recommendations if ML service fails
+            await this.generateFallbackRecommendations(prediction);
+        }
+    }
+
+    async generateFallbackRecommendations(prediction) {
         try {
             const recommendations = [];
 
@@ -522,8 +641,22 @@ class PredictionController {
                 });
             }
 
-            // Create recommendations in database
-            if (recommendations.length > 0) {
+            // Seasonal recommendations
+            if (prediction.season === 'kharif') {
+                recommendations.push({
+                    userId: prediction.userId,
+                    title: 'Kharif Season Water Management',
+                    description: 'Monitor water levels closely during monsoon season to prevent waterlogging',
+                    category: 'water_management',
+                    priority: 'high',
+                    tags: ['kharif', 'water', 'monsoon'],
+                    relatedCrop: prediction.crop,
+                    season: prediction.season
+                });
+            }
+
+            // Create recommendations in database (only if no ML recommendations were created)
+            if (recommendations.length > 0 && (!prediction.recommendationIds || prediction.recommendationIds.length === 0)) {
                 const createdRecommendations = await Recommendation.insertMany(recommendations);
                 
                 // Link recommendations to prediction
@@ -532,7 +665,7 @@ class PredictionController {
             }
 
         } catch (error) {
-            console.error('Error generating recommendations from prediction:', error);
+            console.error('Error generating fallback recommendations:', error);
         }
     }
 }

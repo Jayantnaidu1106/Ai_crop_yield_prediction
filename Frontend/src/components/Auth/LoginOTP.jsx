@@ -25,7 +25,12 @@ function Login({ onOTPSent }) {
         if (result.success) {
             onOTPSent(true); // Transition to the VerifyOTP screen
         } else {
-            setError(result.error);
+            // Check if user needs to register
+            if (result.needsRegistration) {
+                setError(`${result.error} Click "Register Here" below to create an account.`);
+            } else {
+                setError(result.error);
+            }
         }
         setIsLoading(false);
     };

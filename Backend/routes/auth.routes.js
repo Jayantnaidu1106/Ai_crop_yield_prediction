@@ -5,13 +5,13 @@ const router = express.Router();
 const authController = require('../controllers/auth.controller');
 const { validatePhoneNumber, validateOTPVerification, validateSignup } = require('../middleware/validation');
 
-// Route for Step 1: Requesting the code
+// Login Routes (for existing users)
 router.post('/send-otp', validatePhoneNumber, authController.sendOTP);
-
-// Route for Step 2: Checking the code
 router.post('/verify-otp', validateOTPVerification, authController.verifyOTP);
 
-// Route for Step 3: User Signup (Save user data after OTP verification)
+// Registration Routes (for new users)
+router.post('/send-otp-registration', validatePhoneNumber, authController.sendOTPForRegistration);
+router.post('/verify-otp-registration', validateOTPVerification, authController.verifyOTPForRegistration);
 router.post('/signup', validateSignup, authController.signup);
 
 module.exports = router;

@@ -23,8 +23,8 @@ function Step1_UserInfo({ formData, updateFormData, nextStep }) {
             : `+91${localData.phoneNumber}`;
 
         try {
-            // Send OTP to the phone number
-            const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/auth/send-otp`, {
+            // Send OTP for registration (not login)
+            const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/auth/send-otp-registration`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
