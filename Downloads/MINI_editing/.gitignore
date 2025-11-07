@@ -39,3 +39,44 @@ build/
 # Temporary files
 tmp/
 temp/
+
+# User-specific files and directories
+AppData/
+Local Settings/
+My Documents/
+Cookies/
+Documents/My Music/
+Documents/My Pictures/
+Documents/My Videos/
+NetHood/
+PrintHood/
+Recent/
+SendTo/
+Start Menu/
+Templates/
+Contacts/
+Desktop/
+Favorites/
+Links/
+Music/
+Videos/
+Saved Games/
+Searches/
+OneDrive/
+.cursor/
+.gitconfig
+.ipython/
+.keras/
+.matplotlib/
+NTUSER.DAT*
+ntuser.dat*
+ntuser.ini
+desktop.ini
+
+# Exclude all files in parent directory
+../*
+
+# Backend uploads
+backend/uploads/projects/*
+backend/uploads/studyrooms/*
+!backend/uploads/studyrooms/README.md
