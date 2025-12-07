@@ -115,6 +115,16 @@ export const getProjectById = async (req,res) => {
 
         // Check if user has access
         const userId = req.user._id.toString();
+        
+        // Check if user is removed from the project
+        const isRemoved = project.removedUsers && project.removedUsers.some(r => 
+            r.user.toString() === userId
+        );
+        
+        if (isRemoved) {
+            return res.status(403).json({ error: 'You have been removed from this project', removed: true });
+        }
+        
         const ownerId = project.owner._id ? project.owner._id.toString() : project.owner.toString();
         const isOwner = userId === ownerId;
         const isParticipant = project.users.some(u => {

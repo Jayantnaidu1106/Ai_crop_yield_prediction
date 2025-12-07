@@ -9,25 +9,35 @@ async function testAI() {
     
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
     
-    // Test different model names
+    // First, try to list available models
+    try {
+        console.log('\n=== Attempting to list available models ===');
+        const models = await genAI.listModels();
+        console.log('Available models:');
+        models.forEach(model => {
+            console.log(`- ${model.name} (${model.displayName})`);
+        });
+    } catch (error) {
+        console.log('Could not list models:', error.message);
+    }
+    
+    // Test different model names (updated for 2024)
     const modelNames = [
-        'gemini-pro',
-        'gemini-1.5-pro',
-        'gemini-1.5-flash',
-        'models/gemini-pro',
-        'models/gemini-1.5-pro',
-        'models/gemini-1.5-flash'
+        'gemini-1.5-flash-002',
+        'gemini-1.5-flash-001',
+        'gemini-1.5-pro-002',
+        'gemini-2.0-flash-exp',
     ];
     
     for (const modelName of modelNames) {
         try {
             console.log(`\n=== Testing model: ${modelName} ===`);
             const model = genAI.getGenerativeModel({ model: modelName });
-            const result = await model.generateContent('Say hello');
+            const result = await model.generateContent('Say hello in one sentence');
             const response = result.response;
             const text = response.text();
             console.log(`✅ SUCCESS with ${modelName}`);
-            console.log('Response:', text.substring(0, 100));
+            console.log('Response:', text);
             break; // Stop after first success
         } catch (error) {
             console.log(`❌ FAILED with ${modelName}`);

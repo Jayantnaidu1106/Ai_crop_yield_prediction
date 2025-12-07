@@ -2,25 +2,35 @@ import express from 'express';
 import { authUser } from '../middlewares/auth.middleware.js';
 import Message from '../models/message.model.js';
 import projectModel from '../models/project.model.js';
+import StudyRoom from '../models/studyroom.model.js';
 
 const router = express.Router();
 
-// Get messages for a project
+// Get messages for a project or study room
 router.get('/:projectId', authUser, async (req, res) => {
     try {
         const { projectId } = req.params;
-        const userId = req.user._id;
+        const userId = req.user._id || req.user.userId || req.user.id;
 
-        // Check if user has access to project
-        const project = await projectModel.findById(projectId);
-        if (!project) {
-            return res.status(404).json({ error: 'Project not found' });
+        // Try to find as project first (backward compatibility)
+        let project = await projectModel.findById(projectId);
+        let hasAccess = false;
+
+        if (project) {
+            // Check project access
+            const isOwner = project.owner.toString() === userId.toString();
+            const isParticipant = project.users.some(u => u.toString() === userId.toString());
+            hasAccess = isOwner || isParticipant;
+        } else {
+            // Try as study room
+            const studyRoom = await StudyRoom.findById(projectId);
+            if (studyRoom) {
+                // Check study room access
+                hasAccess = studyRoom.isOwner(userId) || studyRoom.isParticipant(userId);
+            }
         }
 
-        const isOwner = project.owner.toString() === userId.toString();
-        const isParticipant = project.users.some(u => u.toString() === userId.toString());
-
-        if (!isOwner && !isParticipant) {
+        if (!hasAccess) {
             return res.status(403).json({ error: 'Access denied' });
         }
 
@@ -30,7 +40,7 @@ router.get('/:projectId', authUser, async (req, res) => {
             deletedForEveryone: false,
             deletedBy: { $ne: userId }
         })
-        .populate('sender', 'email')
+        .populate('sender', 'email name')
         .sort({ timestamp: 1 })
         .limit(500); // Limit to last 500 messages
 

@@ -31,6 +31,13 @@ Frontend will run on `http://localhost:5174`
 MONGO_URI=mongodb://localhost:27017/your-database-name
 JWT_SECRET=your-secret-key
 PORT=3000
+# Akool avatar streaming (provide real values in your private .env)
+AKOOL_API_KEY=your-akool-api-key
+AKOOL_AGORA_APP_ID=your-agora-app-id
+# Choose the appropriate Akool identifier based on your scene/avatar setup
+AKOOL_SCENE_ID=your-akool-scene-id
+# or
+AKOOL_AVATAR_ID=your-akool-avatar-id
 ```
 
 ## Testing the Features

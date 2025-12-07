@@ -30,6 +30,13 @@ const messageSchema = new mongoose.Schema({
     deletedForEveryone: {
         type: Boolean,
         default: false
+    },
+    edited: {
+        type: Boolean,
+        default: false
+    },
+    editedAt: {
+        type: Date
     }
 });
 

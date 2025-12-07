@@ -37,6 +37,10 @@ const Project = () => {
   // Message management states
   const [selectedMessages, setSelectedMessages] = useState([]);
   const [showMessageMenu, setShowMessageMenu] = useState(null);
+  const [hoveredMessage, setHoveredMessage] = useState(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [editingMessage, setEditingMessage] = useState(null);
+  const [editText, setEditText] = useState('');
 
   // Load messages from database on mount
   useEffect(() => {
@@ -107,6 +111,17 @@ const Project = () => {
         }
       });
 
+      // Listen for permanent ban
+      recieveMessage('permanently-banned', (data) => {
+        alert(`🚫 ${data.message}\n\nYou cannot rejoin this project.`);
+        navigate('/');
+      });
+
+      // Listen for user removed (refresh for other participants)
+      recieveMessage('user-removed', (data) => {
+        fetchProject(); // Refresh project details and participant list
+      });
+
       // Listen for user removed (by owner)
       recieveMessage('user-removed', (data) => {
         console.log('User removed:', data);
@@ -144,6 +159,15 @@ const Project = () => {
 
       recieveMessage('all-chat-cleared-for-me', () => {
         setMessages([]);
+      });
+
+      // Listen for message edits
+      recieveMessage('message-edited', (data) => {
+        setMessages(prev => prev.map(msg => 
+          msg._id === data.messageId 
+            ? { ...msg, message: data.newMessage, edited: true } 
+            : msg
+        ));
       });
     }
   }, [project, user]);
@@ -192,7 +216,19 @@ const Project = () => {
       const response = await api.get(`/project/get-project/${id}`);
       setProject(response.data.project);
     } catch (err) {
-      setError('Failed to fetch project: ' + (err.response?.data?.error || err.message));
+      const errorMsg = err.response?.data?.error || err.message;
+      setError('Failed to fetch project: ' + errorMsg);
+      
+      // Handle removed/banned users
+      if (err.response?.data?.removed) {
+        alert('🚫 You have been permanently removed from this project and cannot access it.');
+        navigate('/home');
+        return;
+      }
+      
+      if (err.response?.status === 403 || err.response?.status === 404) {
+        setTimeout(() => navigate('/home'), 2000);
+      }
     } finally {
       setLoading(false);
     }
@@ -247,14 +283,76 @@ const Project = () => {
     );
   };
 
+  const handleSelectMessage = (msg) => {
+    if (!selectionMode) {
+      setSelectionMode(true);
+    }
+    toggleMessageSelection(msg._id);
+    setHoveredMessage(null);
+  };
+
+  const handleCancelSelection = () => {
+    setSelectionMode(false);
+    setSelectedMessages([]);
+  };
+
+  const handleCopyMessage = (text) => {
+    navigator.clipboard.writeText(text).then(() => {
+      alert('Message copied to clipboard!');
+    }).catch(() => {
+      alert('Failed to copy message');
+    });
+    setHoveredMessage(null);
+  };
+
+  const handleEditMessage = (msg) => {
+    setEditingMessage(msg);
+    setEditText(msg.message);
+    setHoveredMessage(null);
+  };
+
+  const handleSaveEdit = () => {
+    if (!editText.trim() || !editingMessage) return;
+    
+    sendMessage('edit-message', {
+      messageId: editingMessage._id,
+      newMessage: editText
+    });
+    
+    setMessages(prev => prev.map(msg => 
+      msg._id === editingMessage._id ? { ...msg, message: editText, edited: true } : msg
+    ));
+    
+    setEditingMessage(null);
+    setEditText('');
+  };
+
+  const handleCancelEdit = () => {
+    setEditingMessage(null);
+    setEditText('');
+  };
+
   const handleDeleteSelected = () => {
     if (selectedMessages.length === 0) {
       alert('No messages selected');
       return;
     }
     
+    // Check if user can delete all selected messages
+    const canDeleteAll = selectedMessages.every(msgId => {
+      const msg = messages.find(m => m._id === msgId);
+      return msg && (msg.isOwn || isOwner());
+    });
+    
+    if (!canDeleteAll) {
+      alert('You can only delete your own messages. Owner can delete any message.');
+      return;
+    }
+    
+    if (!confirm(`Delete ${selectedMessages.length} selected message(s) for everyone?`)) return;
+    
     selectedMessages.forEach(messageId => {
-      sendMessage('delete-message-for-me', { messageId });
+      sendMessage('delete-message-for-everyone', { messageId });
     });
     
     setMessages(prev => prev.filter(msg => !selectedMessages.includes(msg._id)));
@@ -609,14 +707,14 @@ const Project = () => {
                   />
                   
                   <div
-                    className={`px-4 py-3 rounded-lg max-w-[80%] text-sm shadow-md ${
-                      isSelected ? 'ring-2 ring-blue-500' : ''
+                    className={`px-4 py-2.5 rounded-2xl min-w-[100px] max-w-[75%] md:max-w-[65%] text-sm shadow-sm break-words ${
+                      isSelected ? 'ring-2 ring-yellow-400' : ''
                     } ${
                       isAI 
                         ? 'bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200' 
                         : msg.isOwn 
-                          ? 'bg-[#d1c4e9]' 
-                          : 'bg-[#c8e6c9]'
+                          ? 'bg-gradient-to-br from-purple-400 to-purple-500 text-white' 
+                          : 'bg-gradient-to-br from-green-400 to-green-500 text-white'
                     }`}
                   >
                   {/* Check if message is from AI and render as markdown */}
@@ -683,7 +781,7 @@ const Project = () => {
                   </div>
 
                   {/* Delete button */}
-                  {msg.isOwn && !isAI && (
+                  {(msg.isOwn || isOwner()) && !isAI && (
                     <button
                       onClick={() => setShowMessageMenu(showMessageMenu === msg._id ? null : msg._id)}
                       className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-600 hover:text-gray-800"
@@ -702,7 +800,7 @@ const Project = () => {
                         <i className="ri-delete-bin-line mr-2"></i>
                         Delete for me
                       </button>
-                      {isOwner() && (
+                      {(msg.isOwn || isOwner()) && (
                         <button
                           onClick={() => handleDeleteMessageForEveryone(msg._id)}
                           className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm text-red-600"
