@@ -1,0 +1,44 @@
+# Dependencies
+**/node_modules
+**/.venv
+**/venv
+**/env
+
+# Build artifacts
+**/dist
+**/build
+**/__pycache__
+**/*.pyc
+
+# Environment files (secrets)
+**/.env
+**/.env.local
+**/.env.*.local
+
+# IDE / OS
+**/.vscode
+**/.idea
+**/.DS_Store
+**/Thumbs.db
+**/*.swp
+**/*.swo
+
+# Git
+.git
+.gitignore
+
+# Docker
+docker-compose*.yml
+**/Dockerfile
+**/.dockerignore
+
+# Docs
+*.md
+!README.md
+!DOCKER.md
+
+# Misc
+**/coverage
+**/.pytest_cache
+**/.hypothesis
+**/mymodel

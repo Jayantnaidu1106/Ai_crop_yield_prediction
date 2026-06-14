@@ -1,0 +1,90 @@
+services:
+  # ─────────────────────────────────────────────
+  #  MongoDB Database
+  # ─────────────────────────────────────────────
+  mongo:
+    image: mongo:6
+    container_name: farmplus-mongo
+    restart: unless-stopped
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    volumes:
+      - mongo_data:/data/db
+    environment:
+      - MONGO_INITDB_DATABASE=crop_yield_db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ─────────────────────────────────────────────
+  #  FastAPI ML Microservice (Python)
+  # ─────────────────────────────────────────────
+  fastapi:
+    image: jayantnaidu1106/farmplus-fastapi:latest
+    container_name: farmplus-fastapi
+    restart: unless-stopped
+    ports:
+      - "${FASTAPI_PORT:-8000}:8000"
+    environment:
+      - MONGODB_URI=mongodb://mongo:27017/crop_yield_db
+      - FASTAPI_ENV=${FASTAPI_ENV:-production}
+    depends_on:
+      mongo:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # ─────────────────────────────────────────────
+  #  Express.js Backend (Node.js)
+  # ─────────────────────────────────────────────
+  express:
+    image: jayantnaidu1106/farmplus-express:latest
+    container_name: farmplus-express
+    restart: unless-stopped
+    ports:
+      - "${EXPRESS_PORT:-5000}:5000"
+    environment:
+      - PORT=5000
+      - MONGODB_URI=mongodb://mongo:27017/crop_yield_db
+      - FASTAPI_ML_URL=http://fastapi:8000
+      - JWT_SECRET=${JWT_SECRET}
+      - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID}
+      - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN}
+      - TWILIO_VERIFY_SERVICE_SID=${TWILIO_VERIFY_SERVICE_SID}
+      - TWILIO_PHONE_NUMBER=${TWILIO_PHONE_NUMBER}
+      - OPENWEATHER_API_KEY=${OPENWEATHER_API_KEY}
+    depends_on:
+      mongo:
+        condition: service_healthy
+      fastapi:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "const http = require('http'); http.get('http://localhost:5000/api/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ─────────────────────────────────────────────
+  #  React Frontend (Nginx)
+  # ─────────────────────────────────────────────
+  frontend:
+    image: jayantnaidu1106/farmplus-frontend:latest
+    container_name: farmplus-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    depends_on:
+      express:
+        condition: service_healthy
+
+volumes:
+  mongo_data:
+    driver: local
